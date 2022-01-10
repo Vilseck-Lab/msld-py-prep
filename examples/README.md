@@ -1,4 +1,4 @@
-#Tutorial for Charge Renormalization using *msld_py_prep*
+# Tutorial for Charge Renormalization using *msld_py_prep*
 
 This tutorial was written for preparing the input files for Multisite $\lambda$-Dynamics (MS$\lambda$D) using a common core (multiple topology model, or MTM) setup for binding free energy calculations. However, the same scripts can be used for setting up free energy MTM calculations for any other small molecule transfer process (e.g. solvation).
 
@@ -10,10 +10,10 @@ This tutorial was written for preparing the input files for Multisite $\lambda$-
 - [*MMTSB* Toolset]("http://feig.bch.msu.edu/mmtsb/Main_Page")
 
 # Workflow
-[I. Alignment](#i.-alignment-to-representative-molecule)
-[II. Common Core Identification](#ii.-common-core-identification)
-[III. Charge Renormalization](#iii.-charge-renormalization)
-[IV. Molecule in Water Setup](#iv.-molecule-in-water-setup)
+- [I. Alignment](#i.-alignment-to-representative-molecule)
+- [II. Common Core Identification](#ii.-common-core-identification)
+- [III. Charge Renormalization](#iii.-charge-renormalization)
+- [IV. Molecule in Water Setup](#iv.-molecule-in-water-setup)
 ```mermaid
 graph LR
 A(I. Alignment) -->B(II. Common Core<br> Identification) --> C(III. Charge<br>Renormalization) --> D(IV. Molecule in Water<br> Setup)
