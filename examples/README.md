@@ -1,6 +1,6 @@
 #Tutorial for Charge Renormalization using *msld_py_prep*
 
-This tutorial was written for preparing the input files for Multisite $\lambda$-Dynamics (MS$\lambda$D) using a common core (multiple topology model, or MTM) setup for binding free energy calculations. However, the same scripts can be used for setting up free energy MTM calculations for any other small molecule transfer process (e.g. solvation).
+This tutorial was written for preparing the input files for Multisite λ-Dynamics (MSλD) using a common core (multiple topology model, or MTM) setup for binding free energy calculations. However, the same scripts can be used for setting up free energy MTM calculations for any other small molecule transfer process (e.g. solvation).
 
 
 
