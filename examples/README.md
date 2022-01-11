@@ -10,7 +10,6 @@ This tutorial was written for preparing the input files for Multisite λ-Dynamic
 - [*MMTSB* Toolset]("http://feig.bch.msu.edu/mmtsb/Main_Page")
 
 # Workflow
-<<<<<<< HEAD
 [I. Alignment](#i.-alignment-to-representative-molecule)
 [II. Common Core Identification](#ii.-common-core-identification)
 [III. Charge Renormalization](#iii.-charge-renormalization)
@@ -20,7 +19,6 @@ This tutorial was written for preparing the input files for Multisite λ-Dynamic
 - [II. Common Core Identification](#ii.-common-core-identification)
 - [III. Charge Renormalization](#iii.-charge-renormalization)
 - [IV. Molecule in Water Setup](#iv.-molecule-in-water-setup)
->>>>>>> e9e16e74da92dcd8a6d683d90e57d7496cfff347
 ```mermaid
 graph LR
 A(I. Alignment) -->B(II. Common Core<br> Identification) --> C(III. Charge<br>Renormalization) --> D(IV. Molecule in Water<br> Setup)
