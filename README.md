@@ -13,7 +13,7 @@ You can start using the scripts by cloning this repository and following the tut
 
 `
 git clone https://github.com/Vilseck-Lab/msld-py-prep.git`<br>
-`cd msld_py_prep`
+`cd msld-py-prep`
 
 # Dependencies
 Python 3 or later versions.
