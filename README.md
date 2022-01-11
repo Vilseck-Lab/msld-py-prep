@@ -11,9 +11,9 @@ The output is a directory of CHARMM compatible files to readily use for MSλD si
 MSLD pyprep uses Python 3 or later versions. 
 You can start using the scripts by cloning this repository and following the tutorial in the `examples` directory.
 
->`
+`
 git clone https://github.com/Vilseck-Lab/msld-py-prep.git`<br>
->`cd msld_py_prep`
+`cd msld_py_prep`
 
 # Dependencies
 Python 3 or later versions.
