@@ -11,9 +11,10 @@ This tutorial was written for preparing input files for Multisite λ-Dynamics (M
 
 # Workflow
 - [I. Alignment](#i-alignment-to-representative-molecule)
-- [II. Common Core Identification](#ii.-common-core-identification)
-- [III. Charge Renormalization](#iii.-charge-renormalization)
-- [IV. Molecule in Water Setup](#iv.-molecule-in-water-setup)
+- [II. Common Core Identification](#ii-common-core-identification)
+- [III. Charge Renormalization](#iii-charge-renormalization)
+- [IV. Molecule in Water Setup](#iv-molecule-in-water-setup)
+- [V. Final Steps](#v-final-steps)
 ```mermaid
 A(I. Alignment) --> B(II. Common Core Identification) --> C(III. Charge Renormalization) --> D(IV. Molecule in Water Setup)
 ```
