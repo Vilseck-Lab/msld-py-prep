@@ -14,9 +14,9 @@ You can start using the scripts by cloning this repository and following the tut
 `cd msld-py-prep`
 
 # Dependencies
-msld_py_prep requires Python 3 (or later versions), numpy, and pandas (or alternatively Anaconda) <br>
-Lg_Solvate.sh uses convpdb.pl from the MMTSB toolset (https://github.com/mmtsb/toolset) <br>
-vis_check.py is written for use with PyMOL (https://github.com/schrodinger/pymol-open-source) <br>
+- msld_py_prep requires Python 3 (or later versions), numpy, and pandas (or alternatively Anaconda) <br>
+- Lg_Solvate.sh uses convpdb.pl from the [MMTSB toolset](https://github.com/mmtsb/toolset) <br>
+- vis_check.py is written for use with [PyMOL](https://github.com/schrodinger/pymol-open-source) <br>
 
 # Usage
 Please see the examples directory for a detailed tutorial.
