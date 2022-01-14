@@ -10,7 +10,7 @@ This tutorial was written for preparing input files for Multisite λ-Dynamics (M
 - [*MMTSB* Toolset]("http://feig.bch.msu.edu/mmtsb/Main_Page")
 
 # Workflow
-- [I. Alignment](#i.-alignment-to-representative-molecule)
+- [I. Alignment](#i-alignment-to-representative-molecule)
 - [II. Common Core Identification](#ii.-common-core-identification)
 - [III. Charge Renormalization](#iii.-charge-renormalization)
 - [IV. Molecule in Water Setup](#iv.-molecule-in-water-setup)
