@@ -16,6 +16,7 @@ This tutorial was written for preparing input files for Multisite λ-Dynamics (M
 - [IV. Molecule in Water Setup](#iv-molecule-in-water-setup)
 - [V. Final Steps](#v-final-steps)
 ```mermaid
+graph LR
 A(I. Alignment) --> B(II. Common Core Identification) --> C(III. Charge Renormalization) --> D(IV. Molecule in Water Setup)
 ```
 
