@@ -59,6 +59,8 @@ A(I. Alignment) --> B(II. Common Core Identification) --> C(III. Charge Renormal
 
 **8.**  Run the _vis_check.py_ script within PyMol. All of the ligands should load with the common core atoms represented as hard spheres (including anchor atoms). Check each ligand to make sure the desired core has been identified.
 
+**NOTE** In this step, a maximum common substructure search (MCSS) is performed. Core and fragment atoms are identified based on their force field atom types. As a result, chiral groups will fail to be correctly identified as distinct and separate entities. A quick workaround to this problem is to rename a chiral atom's atom type in a compound's topology file prior to running this step of _msld_py_prep.py_. Then, after the MCSS has completed, return the chiral atom's atom type to its original form. The reminder of _msld_py_prep.py_ will work correctly and the chrial group will be included in the final MSLD ligand files. 
+
 ## III. Charge Renormalization
 
 **1.**  Once a common core has been identified via the _MCS_for MSLD.txt_ output file, run the _msld_py_prep.py_ script once more. This should generate a directory called **`build.[sysname]`**, where the core and site specific fragments’ .pdb, .rtf and .prm files compatible with CHARMM are generated, as well as input scripts for CHARMM to perform MSλD.  
