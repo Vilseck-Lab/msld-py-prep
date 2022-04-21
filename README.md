@@ -25,7 +25,7 @@ Please see the examples directory for a detailed tutorial.
 Please cite the following reference:
 "Optimizing Multisite λ-Dynamics Throughput with Charge Renormalization"
 Jonah Z. Vilseck, Luis F. Cervantes, Ryan L. Hayes, and Charles L. Brooks
-*Journal of Chemical Information and Modeling* **2022** *62 (6)*, 1479-1488
+*Journal of Chemical Information and Modeling* **2022** *62 (6)*, 1479-1488;
 DOI: 10.1021/acs.jcim.2c00047 
 
 # Disclaimer
