@@ -22,7 +22,11 @@ You can start using the scripts by cloning this repository and following the tut
 Please see the examples directory for a detailed tutorial.
 
 # Citation
-Citation pending, manuscript under review.
+Please cite the following reference:
+"Optimizing Multisite λ-Dynamics Throughput with Charge Renormalization"
+Jonah Z. Vilseck, Luis F. Cervantes, Ryan L. Hayes, and Charles L. Brooks
+*Journal of Chemical Information and Modeling* **2022** *62 (6)*, 1479-1488
+DOI: 10.1021/acs.jcim.2c00047 
 
 # Disclaimer
 These scripts are provided as is and are subject to future modification.
