@@ -52,6 +52,42 @@ def show_warning(warning,info):
     msg.setWindowTitle("Error")
     msg.exec_()
 
+def truncate_at_names(fname):
+    """
+    PyMOL outputs atom names with greater than 4 characters for
+    halogens. Need to truncate for CHARMM.
+    """
+
+    import string 
+    import os
+    from copy import deepcopy
+    
+    with open(fname,'r') as f:
+        lines = f.readlines()
+    
+    newlines = deepcopy(lines)
+    idx = [i for i in range(len(lines)) if lines[i].startswith('@<TRIPOS>ATOM') or lines[i].startswith('@<TRIPOS>BOND')]
+    
+    atnames = [l.rstrip().split()[1] for l in lines[idx[0]+1:idx[1]]]
+    atnames = [at for at in atnames]
+    alphabet = list(string.ascii_uppercase)
+    for i,line in enumerate(lines[idx[0]+1:idx[1]]):
+        if any(patt in line for patt in ['Cl','CL','Br','BR']):
+            atname = line.rstrip().split()[1]
+            if len(atname) <= 4:
+                continue
+            newatname = atname[0:3]+atname[-1]
+            atnames[i] == newatname
+            it=0
+            while newatname in atnames:
+                newatname = atname[0:3]+alphabet[it]
+                it+=1
+            newline = line.replace(atname, newatname)
+            newlines[i+idx[0]+1] = newline
+        
+    with open(fname,'w') as f:
+        f.write("".join(newlines))
+
 def get_bonded_matrix(fname):
     import numpy as np
     with open(fname, 'r') as f:
@@ -354,6 +390,8 @@ def make_dialog():
             cmd.load(f"{molname}.mol")
             # Convert to mol2's
             cmd.save(f"{molname}.mol2",selection=molname,format="mol2")
+            # Change atom naming to 4 characters
+            truncate_at_names(f"{molname}.mol2")
             # Remove mol objects from PyMOL session
             cmd.delete(molname)
             # Uniquely rename atoms (required for PyPrep Scripts)
@@ -490,6 +528,7 @@ def make_dialog():
                         return None
  
             cmd.save(ob+'.mol2',selection=ob,format='mol2')
+            truncate_at_names(ob+'.mol2')
 
         # Create molfile
         molfile = "mol_list.txt"                  # list of mol2 file names
