@@ -240,14 +240,15 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     
     # # debug
     if debug:
-        print("AFTER QUICK EMPTY or 1 MATCH CHECKS")
-        print("")
+        print("##AFTER QUICK EMPTY or 1 MATCH CHECKS")
+        print("##CORES")
         printListDict(cores)
         print("")
-        print("")
+        print("##MATCHES")
         printListDict(matches)
         print("")
         print("")
+
     
     ## (iiC) Make sure all core lists have the same number of atoms: Correct inconsistencies
     chkcores=[]
@@ -347,16 +348,28 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                 elif chk == len(ms)-1:
                     matches[m1].pop(atoms[m1][at1])
                     cores[m1][atoms[m1][at1]]=deepcopy(tmplist)
+                    # need to update cores/matches of other molecules at the same time
+                    fixlist=deepcopy(tmplist)
+                    fixlist[m1]=[atoms[m1][at1]]
+                    for mfix in range(len(ms)):
+                        if mfix == m1: continue # m1 matches/cores lists already fixed above
+                        matfix=fixlist[mfix][0] # the atom to pop off matches and add to cores
+                        # skip molecules with mismatched number of core atoms; errors corrected downstream
+                        if not (matfix in matches[mfix].keys()): continue
+                        mfixlist=deepcopy(fixlist) # create a tmplist called mfixlist
+                        mfixlist[mfix]=[]
+                        matches[mfix].pop(matfix)  # effect the updates
+                        cores[mfix][matfix]=deepcopy(mfixlist)
                 else:
                     matches[m1][atoms[m1][at1]]=deepcopy(tmplist)
     
     # # debug
     if debug:
-        print("BEFORE CORE CHK")
-        print("")
+        print("##BEFORE CORE CHK")
+        print("##MATCHES")
         printListDict(matches)
         print("")
-        print("")
+        print("##CORES")
         printListDict(cores)
         print("")
         print("")
@@ -757,7 +770,21 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                             if f != f2:
                                 newlist.append(Aatoms[m][droplist[at]][f2])
                         Aatoms[m][droplist[at]]=newlist
-                Aatoms[m][newname] = deepcopy(frag)
+                # check for newname already in Aatoms key
+                if newname in Aatoms[m].keys():
+                    print("ERROR: newname key already exists within Aatoms[m]")
+                    print("       rework newname... and try again")
+                    tmpNN=newname.split('+')
+                    tmpnewname=''
+                    for tnn in range(len(tmpNN)-1,0-1,-1):
+                        tmpnewname+=tmpNN[tnn]+'+'
+                    tmpnewname=tmpnewname[0:-1]
+                    if tmpnewname in Aatoms[m].keys():
+                        print("ERROR: tmpnewname",tmpnewname,"key already exists within Aatoms[m]")
+                        quit()
+                    Aatoms[m][tmpnewname] = deepcopy(frag)
+                else:
+                    Aatoms[m][newname] = deepcopy(frag)
             elif len(droplist) == 1:
                 Aatoms[m][droplist[0]] = deepcopy(frag)
             else: #len(droplist) < 1:
