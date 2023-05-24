@@ -1,5 +1,9 @@
 #! /usr/bin/env python
 
+##
+## Perform Charge Renormalization
+##
+
 import numpy as np
 import pandas as pd
 from copy import deepcopy
@@ -9,7 +13,7 @@ class CRN_Error(Exception):
     import sys
     sys.exit
 
-def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=False,ll=True):
+def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=False,ll=True):
     """
     Using the information within mcsout, as well as previously supplied mol2 and toppar
     files, perform charge renormalization to generate MSLD suitable force field parameters
@@ -17,7 +21,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
     Use ChkQChange=True to check for charge perturbations between different substituents
     Use verbose=True to get extra output
     Use debug=True to get LOTS of extra output
-    Use ll=True to build the "large_lig.pdb" file needed for easy solvation
+    Use ll=True to build the "large_lig.pdb" file needed for easy solvation with Lg_Solvate.sh
     """
 
     #################################################################
@@ -165,7 +169,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
                 #add to the corelist DataFrame
                 coreLPs[mol].append(lp[0])
             else: # it is in a fragment
-                 # figure out which fragment lp[1] is in and then add lp[0] into the list of fragment atoms!
+                 # figure out which fragment lp[1] is in and then add lp[0] into the list of fragment atoms
                 for site in range(nsites):
                     for frag in range(len(frags[site])):
                         if frags[site][frag] == rtfinfo[mol]['NAME']:
@@ -183,7 +187,6 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
         if not coreLPs.empty:
             print("New cores with LP atoms:\n",cores,'\n')
         for mol in range(len(mols)):
-        #for mol in range(2):
             print(rtfinfo[mol]['NAME'],rtfinfo[mol]['QNET'])
             #for field in ['MASS','ATOM','BOND','IMPR','ATTYPE','ATQ']:
             for field in ['MASS','ATTYPE','ATQ','BOND','IMPR','LP']:
@@ -218,11 +221,11 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
 
 
     #################################################################
-    ## Account for inFrag and inCore specifications (modifies cores)
-    ## "inCore" is really only useful to specify Aatoms to be left in
+    ## Account for inFrag and AnCore specifications (modifies cores)
+    ## "AnCore" is really only useful to specify Aatoms to be left in
     ## the core - otherwise, they are (by default) moved onto the frags
 
-    # check for correct formats for inFrag and inCore
+    # check for correct formats for inFrag and AnCore
     crtfrm='['
     for site in range(nsites):
         crtfrm+='[]'
@@ -236,13 +239,13 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
         inFrag=[]
         for site in range(nsites):
             inFrag.append([])
-    if len(inCore) != nsites:
+    if len(AnCore) != nsites:
         # if it isn't right, print an error message and setup a default inFrag variable to continue with
-        print("\ninCore is not specified correctly!! It should look like this: "+crtfrm)
+        print("\nAnCore is not specified correctly!! It should look like this: "+crtfrm)
         print("A default (empty) value will be used, but this may not yield the results you want")
-        inCore=[]
+        AnCore=[]
         for site in range(nsites):
-            inCore.append([])
+            AnCore.append([])
     # create list of atoms to move out of the core (add in Aatoms by default)
     droplist=[]
     for at in range(len(Aatoms[refnum])):
@@ -255,10 +258,10 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
             for at in inFrag[site]:
                 if not (at in droplist[site]):
                     droplist[site].append(at)
-    # remove any inCore atoms
+    # remove any AnCore atoms
     for site in range(nsites):
-        if len(inCore[site]) > 0:
-            for at in inCore[site]:
+        if len(AnCore[site]) > 0:
+            for at in AnCore[site]:
                 if at in droplist[site]:
                     droplist[site].remove(at)
 
@@ -301,8 +304,8 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
     ## Perform Charge Renormalization (CRN)
 
     offset=0.000001  # the amount by which charges are renormalized
-    dec=6           # the precision of final (written) charges
-    Qcut=5.0        # provide a warning for large charge diffs in the core
+    dec=6            # the precision of final (written) charges
+    Qcut=5.0         # provide a warning for large charge diffs in the core
 
     # check for charge perturbations
     qnet=float(rtfinfo[refnum]['QNET'])
@@ -396,6 +399,10 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
                 qchk=float(str(np.around(Qfrag[site][frag].sum()-float(QQ[frag]),decimals=dec)))
             else:
                 qchk=float(str(np.around(Qfrag[site][frag].sum(),decimals=dec)))
+            #print(frags[site][frag],qchk,str(qchk),str(qchk)=='-0.0')
+            if str(qchk) == '-0.0':    
+                qchk = float(0.0)   
+            #print(frags[site][frag],qchk,str(qchk))
             if str(qchk) != str(siteavg[site]):
                 raise CRN_Error('Error for fragment CRN for site '+str(site+1)+', frag = '+frags[site][frag]+
                 ". Total charge ("+str(qchk)+") doesn't match the site average ("+str(siteavg[site])+") ")
@@ -448,7 +455,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
         coffset=coffset*-1.0
     nsteps=int(np.around(qdiff/coffset,decimals=0)) # should be a positive int
 
-    if debug: # remove?
+    if debug: 
         print("ideal total charge = ",rtfinfo[refnum]['QNET'])
         print("site averages = ",siteavg)
         print("sitesum = ",sitesum)
@@ -483,17 +490,22 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
     # check that total core charges match the neg of sitesum (+qnet accounts for charged molecules)
     qchk=float(str(np.around(-1*QQ.sum(),decimals=dec)))
     sitechk=float(str(np.around(sitesum+intsum-qnet,decimals=dec)))
-    if debug: # remove
-        print("QCHK",qchk) # remove
-        print("SiteCHK",sitechk) # remove
-        print("Qnet",qnet) # remove
+    if debug: 
+        print("QCHK",qchk) 
+        print("SiteCHK",sitechk) 
+        print("Qnet",qnet) 
+    if str(qchk) == '-0.0':
+        qchk = 0.0
     if str(qchk) != str(sitechk):
         raise CRN_Error("Error for core CRN. Total charge ("+str(qchk*-1)+
                         ") doesn't neutralize site charge sums ("+str(sitesum)+") ")
     else:
         if verbose:
             print("Core Q(sum) = "+str(qchk*-1))
-            pdiff=float(str(np.around(qdiff/QQsum*100,decimals=2)))
+            if QQsum == 0.0:
+                pdiff=0.0
+            else:
+                pdiff=float(str(np.around(qdiff/QQsum*100,decimals=2)))
             print("  Q(orig) = "+str(QQsum)+" (a "+str(pdiff)+"% diff from orig charges)",end='')
             if abs(pdiff) > Qcut:
                 print(" ** CHECK")
@@ -778,7 +790,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
 
     # write core.rtf
     fp=open(outdir+'/core.rtf','w')
-    fp.write('* ligand core rtf file generated with py_prep for MSLD (JZV 09/2018)\n')
+    fp.write('* ligand core rtf file generated with msld_py_prep for MSLD (JV,LC)\n')
     fp.write('* (core from %s)\n* \n' % (reflig))
     fp.write('  %d %d\n' % (rtfvers1,rtfvers2))
 
@@ -787,8 +799,6 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
 
     # add in mass statements if there are any and remove redundancies
     # (assumes consistant atom typing across the different molecules)
-    #
-    #  !! (Will need fixed to work with LPG!! (b/c the atom types are all numerical and mixed up between files)
 
     # core mass statements first
     addlist=[]
@@ -833,7 +843,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
                     lp.write("LONEPAIR COLI sele atom @ligseg @resnum %s end -\n" % (Ctrans[ln[0]]))
                     lp.write("              sele atom @ligseg @resnum %s end -\n" % (Ctrans[ln[1]]))
                     lp.write("              sele atom @ligseg @resnum %s end -\n" % (Ctrans[ln[2]]))
-                    #lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],ln[6])) # doesn't work with CGenFF?
+                    #lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],ln[6])) # doesn't work with CGenFF
                     lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],'0.00'))
         else:
             #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at],rtfinfo[refnum]['ATTYPE'][at],QQ.loc[at]))
@@ -864,7 +874,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
                     break
             # write atom block
             fp=open(outdir+'/site'+str(site+1)+'_sub'+str(frag+1)+'_pres.rtf','w')
-            fp.write('* fragment patch rtf file generated with py_prep for MSLD (JZV 09/2018)\n')
+            fp.write('* fragment patch rtf file generated with py_prep for MSLD (JV,LC)\n')
             fp.write('* (fragment from %s)\n* \n' % (frags[site][frag]))
             fp.write('  %d %d\n\n' % (rtfvers1,rtfvers2))
             if ChkQChange:             # Calc frag net charge
@@ -889,7 +899,7 @@ def MsldCRN(mcsout,outdir,inFrag,inCore,ChkQChange=True,verbose=False,debug=Fals
                             lp.write("LONEPAIR COLI sele atom @ligseg @resnum %s end -\n" % (Ftrans[site][frag][ln[0]]))
                             lp.write("              sele atom @ligseg @resnum %s end -\n" % (Ftrans[site][frag][ln[1]]))
                             lp.write("              sele atom @ligseg @resnum %s end -\n" % (Ftrans[site][frag][ln[2]]))
-                            #lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],ln[6])) # doesn't work with CGenFF?
+                            #lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],ln[6])) # doesn't work with CGenFF
                             lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],'0.00'))
                 else:
                     #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ftrans[site][frag][at],rtfinfo[mol]['ATTYPE'][at],Qfrag[site][frag][at]))

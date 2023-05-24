@@ -1,5 +1,9 @@
 #! /usr/bin/env python
 
+##
+## Write out ligand parameters (non-charge FF parameters)
+##
+
 import numpy as np
 import pandas as pd
 from copy import deepcopy
@@ -20,20 +24,6 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     Use verbose=True to get extra output
     Use debug=True to get LOTS of extra output
     """
-
-    ## Stopped here:
-    ##
-    ## - get refnum/reflig from core.rtf
-    ## - get a dictionary of siteM_subN name to original file names from *pres.rtf
-    ## - load in atom names (& dictionary of atom name to atom type)
-    ## - load in the bonds
-    ##     --> b/c all atoms have a unique atom name... do I want to make a massive bonded matrix?
-    ##         (from which to build a bond tree?)
-    ## - build angle and dihedral lists from the bonds
-    ##
-    ## - use the impropers as is (including "!IMPR" lines)
-    ##
-
 
     # load base information
     fp=open(outdir+'/nsubs','r')
@@ -301,7 +291,6 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
 
     if debug:
         print(bondmatx)
-    #debug#
 
     # initialize new structures to be written out (lists keep the order, dicts for redundancy chks)
     newbondL=[]
@@ -435,23 +424,12 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     #    print(newimprD)
 
 
-    ### STOPPED HERE: ###
-    ###  new**L/D structures have all the information you need in them
-    ###  now you just have to loop over all the new*L elements and print
-    ###  out the element + parameter values (from new*D[new*L] dict)
-    ###  with formatting (or not)
-    ###
-    ###  * remember that the new*L element for dihedrals needs to remove 
-    ###    the tail multiplicity (when writing)!
-
-
-
     #################################################################
     ## Write full_ligand.prm
 
     # Add in bonds and make a bond matrix
     fp=open(outdir+'/full_ligand.prm','w')
-    fp.write("* MSLD ligand prm file generated with py_prep (JZV 09/2018)\n* \n\n")
+    fp.write("* MSLD ligand prm file generated with py_prep (JV,LC)\n* \n\n")
 
     fp.write("BONDS\n")
     for bond in newbondL:
@@ -470,7 +448,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
         fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
         fp.write("cutnb 14.0 ctofnb 12.0 ctonnb 11.5 eps 1.0 e14fac 0.5  geom\n")
         for nb in newnbL:
-            fp.write("%s" %(newnbD[nb])) # no new line character?
+            fp.write("%s" %(newnbD[nb])) # no new line character
             #fp.write("%s\n" %(newnbD[nb]))
     fp.write("\nEND")
     fp.close()

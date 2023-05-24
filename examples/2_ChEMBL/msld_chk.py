@@ -1,5 +1,9 @@
 #! /usr/bin/env python
 
+##
+## Check molfile and toppar files before getting started
+##
+
 import numpy as np
 import glob,os
 
@@ -49,10 +53,7 @@ def MsldCHK(molfile):
         if chk:
             raise CHK_Error(mols[mol]+'.mol2 atom names are NOT unique - fix this in both structure and toppar files - then resubmit')
 
-        ####
-        #### If atom names are not unique - you must rename them before
-        #### trying to use this script (in both mol2 and rtf files!)
-        ####
+        ## If atom names are not unique - you must rename them before
 
         # Check to make sure rtf/prm files exist (parse str files)
         if len(glob.glob(mols[mol]+'.rtf')) == 0:

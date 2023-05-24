@@ -1,16 +1,17 @@
 #! /usr/bin/env python
 
+##
+## Maximum Common Substructure search with bonded-environments
+##
+
 import numpy as np
 from copy import deepcopy
 
-###
-### Try a new approach to isolating the CORE
-### Then parse each molecule into core/fragment sections
-###
 
 ### Requirments for successful use:
 ###     ** Molecules MUST be spacially aligned
 ###     ** Atom names (within each mol2 file) must be unique for each atom
+###        (atom names can be similar between different mol2 files)
 ###     ** Atom names cannot have the "+" symbol in their name
 
 
@@ -26,7 +27,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     ** Atom names cannot have the "+" character in their name
 
     """
-    #debug = True # hardcoded debug boolean
 
     ms=[]    # ms is a list of mol2 files
     atoms=[] # atoms is a list of lists of all atom names
@@ -96,8 +96,8 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     for m in range(len(ms)):
         types.append({})
         numLPs=0
-        #fp=open(ms[m]+'.str','r')  ## NEED TO REPLACE STR WITH RTF AFTER DEV FINISHED!
-        fp=open(ms[m]+'.rtf','r')  ## NEED TO REPLACE STR WITH RTF AFTER DEV FINISHED!
+        #fp=open(ms[m]+'.str','r')  # msld_chk splits str files into rtf/prm files
+        fp=open(ms[m]+'.rtf','r')
         line=fp.readline()
         while line:
             if line[0:4] == 'ATOM':
@@ -120,7 +120,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     #         print(types[m])
     #         print("")
     # #debug#
-    
     
     
     ## (4) Start finding the core (heavy atom only search)
@@ -233,7 +232,7 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                     if m1 != m2:
                         if len(matches[m1][atoms[m1][at1]][m2]) == 1:
                             chk+=1
-                if chk == len(ms) - 1: # then we have a core atom match!
+                if chk == len(ms) - 1: # then we have a core atom match
                     droplist.append(atoms[m1][at1])
         for i in droplist:
             at=matches[m1].pop(i)
@@ -241,14 +240,15 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     
     # # debug
     if debug:
-        print("AFTER QUICK EMPTY or 1 MATCH CHECKS")
-        print("")
+        print("##AFTER QUICK EMPTY or 1 MATCH CHECKS")
+        print("##CORES")
         printListDict(cores)
         print("")
-        print("")
+        print("##MATCHES")
         printListDict(matches)
         print("")
         print("")
+
     
     ## (iiC) Make sure all core lists have the same number of atoms: Correct inconsistencies
     chkcores=[]
@@ -266,7 +266,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                 for at1 in m1cores:
                     if not (at1 in m2matches):
                         chkcores[m1][m2].append(at1)
-                        # then add it - is this what we want to do?
                         # at1 = key in m1
                         line=deepcopy(cores[m1][at1])
                         line[m1]=[at1]
@@ -349,16 +348,28 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                 elif chk == len(ms)-1:
                     matches[m1].pop(atoms[m1][at1])
                     cores[m1][atoms[m1][at1]]=deepcopy(tmplist)
+                    # need to update cores/matches of other molecules at the same time
+                    fixlist=deepcopy(tmplist)
+                    fixlist[m1]=[atoms[m1][at1]]
+                    for mfix in range(len(ms)):
+                        if mfix == m1: continue # m1 matches/cores lists already fixed above
+                        matfix=fixlist[mfix][0] # the atom to pop off matches and add to cores
+                        # skip molecules with mismatched number of core atoms; errors corrected downstream
+                        if not (matfix in matches[mfix].keys()): continue
+                        mfixlist=deepcopy(fixlist) # create a tmplist called mfixlist
+                        mfixlist[mfix]=[]
+                        matches[mfix].pop(matfix)  # effect the updates
+                        cores[mfix][matfix]=deepcopy(mfixlist)
                 else:
                     matches[m1][atoms[m1][at1]]=deepcopy(tmplist)
     
     # # debug
     if debug:
-        print("BEFORE CORE CHK")
-        print("")
+        print("##BEFORE CORE CHK")
+        print("##MATCHES")
         printListDict(matches)
         print("")
-        print("")
+        print("##CORES")
         printListDict(cores)
         print("")
         print("")
@@ -455,7 +466,7 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     
     ## (iiG) Assuming the rmsd calculation has successfully completed and there were no alignment problems
     ## Move on to using distance to try to deduce if the remaining atoms pairs can be matched and moved into the core
-    ## Calc distance between atom pairs and eliminate options above the cutoff value (cutoff+0.4)
+    ## Calc distance between atom pairs and eliminate options above the cutoff value (cutoff+0.3)
     
     for m1 in range(len(ms)):
         for at1 in range(len(atoms[m1])):
@@ -532,8 +543,8 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     if chk == 0:
         pass
     else:
-        # (1) for remaining atoms, search their matches for atoms that might have been identified as a core atom already;
-        #     if found, remove those atoms from matches[m][at]; classify matches[m][at] as core or discarded atom if possible
+        # for remaining atoms, search their matches for atoms that might have been identified as a core atom already;
+        # if found, remove those atoms from matches[m][at]; classify matches[m][at] as core or discarded atom if possible
         for m1 in range(len(ms)):
             for at1 in range(len(atoms[m1])):
                 if atoms[m1][at1] in matches[m1].keys():
@@ -566,9 +577,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                     else:
                         pass
         
-        # (2) another check?; if yes, run emptyMatches(ms) first to be able to skip it for molecules that don't need it
-        #
-    
     
     ## (iiI) Make sure all atoms are out of matches - exit with error if not
     chk=emptyMatches(ms)
@@ -612,7 +620,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                 for at1 in m1cores:
                     if not (at1 in m2matches):
                         chkcores[m1][m2].append(at1)
-                        # then add it - is this what we want to do?
                         # at1 = key in m1
                         line=deepcopy(cores[m1][at1])
                         line[m1]=[at1]
@@ -679,7 +686,6 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     
     # now take these sites and start expounding on them to list out all fragment atoms attached to them
     # (remember to look for rings (where one fragment branch joins another nsite/Aatom point)
-    # look at old code to get ideas for how to do this
     
     def GetIndex(atomname,molnum):
         """ given an atomname for a molecule number, return the atom index"""
@@ -764,7 +770,21 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
                             if f != f2:
                                 newlist.append(Aatoms[m][droplist[at]][f2])
                         Aatoms[m][droplist[at]]=newlist
-                Aatoms[m][newname] = deepcopy(frag)
+                # check for newname already in Aatoms key
+                if newname in Aatoms[m].keys():
+                    print("ERROR: newname key already exists within Aatoms[m]")
+                    print("       rework newname... and try again")
+                    tmpNN=newname.split('+')
+                    tmpnewname=''
+                    for tnn in range(len(tmpNN)-1,0-1,-1):
+                        tmpnewname+=tmpNN[tnn]+'+'
+                    tmpnewname=tmpnewname[0:-1]
+                    if tmpnewname in Aatoms[m].keys():
+                        print("ERROR: tmpnewname",tmpnewname,"key already exists within Aatoms[m]")
+                        quit()
+                    Aatoms[m][tmpnewname] = deepcopy(frag)
+                else:
+                    Aatoms[m][newname] = deepcopy(frag)
             elif len(droplist) == 1:
                 Aatoms[m][droplist[0]] = deepcopy(frag)
             else: #len(droplist) < 1:
@@ -783,7 +803,7 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     
     
     if debug:
-        # nsites, Aatoms, and Fatoms after sorting is complete!
+        # nsites, Aatoms, and Fatoms after sorting is complete
         print("")
         print("NSITES:",nsites,'\n')
         print("AATOMS:_______________________________")
@@ -1033,7 +1053,7 @@ def MsldMCS(molfile,mcsout,cutoff=0.8,debug=False):
     ## This also allows you to modify things by hand 
     #fp=open('MCS_for_MSLD.txt','w')
     fp=open(mcsout,'w')
-    fp.write('# Maximum Common Substructure Search for Multisite Lambda Dynamics (JV 2020)\n')
+    fp.write('# Maximum Common Substructure Search for Multisite Lambda Dynamics (JV 2022)\n')
     fp.write('# %d molecules processed\n\n' % (len(ms)))
     # (1) Print nsubs info
     fp.write("NSUBS")
