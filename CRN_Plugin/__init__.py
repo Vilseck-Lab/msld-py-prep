@@ -52,6 +52,34 @@ def show_warning(warning,info):
     msg.setWindowTitle("Error")
     msg.exec_()
 
+# def run_askMCS(i):
+#     text = i.text()
+#     if text == "Yes":
+#         print(f"A previous MCS has been found in: {savedir}")
+#         vis_check.vis_check(mcsout)
+#         with open(mcsout,'r') as f:
+#             mcsinfo = f.readlines()
+#             reflig = [line.split()[1] for line in mcsinfo if line.startswith('REFLIG')]
+#             
+#         print("Reference Ligand is "+reflig[0])
+#         print(f"This previous MCS has been loaded.")
+#         
+#     if text == "No":
+#         
+# 
+# def askMCS(mcsout):
+#     from PyQt5.QtWidgets import QMessageBox
+#     msg = QMessageBox(dialog)
+#     msg.setIcon(QMessageBox.Question)
+#     msg.setText("Do you want to use available MCS?")
+#     msg.setInformativeText(f"A previous MCS has been found. If you do not wish to rerun the MCS search, press NO.")
+#     msg.setWindowTitle("MCS File Available")
+#     msg.setStandardButtons(QMessageBox.Yes|QMessageBox.No|QMessageBox.Cancel)
+#     msg.setDefaultButton(QMessageBox.Yes)
+#     msg.buttonClicked.connect(lambda: run_askMCS(mcsout))
+#     msg.exec_()
+
+
 def truncate_at_names(fname):
     """
     PyMOL outputs atom names with greater than 4 characters for
@@ -136,7 +164,9 @@ def get_rep_mol_atoms(lines,nsubs,mol_names):
 
 def write_new_mcsout(to_remove,new_core,site,mcsout='MCS_for_MSLD.txt'):
     import glob
+    from copy import deepcopy
 
+    sitee = deepcopy(site)
     with open(mcsout,'r') as f:
         lines = f.readlines()
 
@@ -186,7 +216,8 @@ def write_new_mcsout(to_remove,new_core,site,mcsout='MCS_for_MSLD.txt'):
             bonded = [atoms[i] for i in range(len(bonded)) if bonded[i] ==1]
             site_atoms_bonded = set(bonded).intersection(set(site_atoms[site]))
             core_atoms_bonded = list(set(bonded).intersection(set(rep_mol_core)))
-            heavy_core_atoms_bonded = [at for at in core_atoms_bonded if not at.startswith('H')] 
+            heavy_core_atoms_bonded = [at for at in core_atoms_bonded if not at.startswith('H')]
+            print(heavy_core_atoms_bonded)
             # if there are two core atoms that connect to a site n atom, then new_anchor_atom is 'DUM'
             # else: the new_anchor_atom is the only core atom that connects to one or multiple site n atoms.
             if len(heavy_core_atoms_bonded) == 1:
@@ -230,15 +261,16 @@ def write_new_mcsout(to_remove,new_core,site,mcsout='MCS_for_MSLD.txt'):
     
     print(all_site_atoms)
     toRemove = dict(zip(mol_names,to_remove))
-    mols = list(all_site_atoms[site].keys())
+    print(f"Still adding to site {site}")
+    mols = list(all_site_atoms[sitee].keys())
     for mol in toRemove.keys():
-        if mol in all_site_atoms[site].keys():
-            all_site_atoms[site][mol].extend(toRemove[mol])
+        if mol in all_site_atoms[sitee].keys():
+            all_site_atoms[sitee][mol].extend(toRemove[mol])
 
     nsubs = list(map(str,nsubs))
 
     to_write =f"""# Maximum Common Substructure Search for Multisite Lambda Dynamics (JV 2022)
-# 2 molecules processed
+# {len(mols)} molecules processed
 
 NSUBS {' '.join(nsubs)}
 
@@ -456,7 +488,17 @@ def make_dialog():
                     if not os.path.exists(os.path.join(savedir,f"{mol}.sdf")):
                         cmd.save(f"{mol}.sdf",selection=mol,format="sdf")
                 alignMols(molecules, wd=savedir,target=target)  
-            
+    
+    def displayTxt(mcsout):
+        """
+
+        """
+        form.display_mcssoutput.clear()
+        
+        with open(mcsout,'r') as f:
+            displaytxt = f.readlines()
+ 
+        form.display_mcssoutput.append("".join(displaytxt))
 
     def run_mcss():
         from .msld_py_prep import msld_chk
@@ -565,7 +607,119 @@ def make_dialog():
             print(f"This previous MCS has been loaded.")
 
         os.chdir(cwd)
+
+        displayTxt(mcsout)
  
+    def run_rdkitmcss():
+        from .msld_py_prep import msld_chk
+        from .msld_py_prep import vis_check
+        from .msld_py_prep import msld_mcs_rdecomp
+        import glob
+        
+        # Get form data
+        sysname = form.input_sysname.text().rstrip()
+        forcefield = form.input_forcefield.currentText()
+
+        # Verify system name is specified 
+        if not sysname:
+            show_warning('No System Name!','Please specify the\
+                        name of your system.')
+            return None
+
+        # Verify force field is specified 
+        if not forcefield:
+            show_warning('No ForceField!','Please specify the\
+                        force field with which you wish to parameterize your system.')
+            return None
+
+        # Have not enabled GAFF compatibility yet 
+        if forcefield == 'GAFF':
+            show_warning('GAFF Not Supported','GAFF is not yet supported.\
+                        Please use another force field.')
+
+            # Comment out warning and generate CHARMM compatible GAFF
+            # parameter files here if this is needed.
+
+            return None
+
+        # Get pymol objects
+        molObjs = cmd.get_names('objects', enabled_only=1)
+        
+        # Verify more than one molecule is loaded
+        if len(molObjs) <= 1:
+            show_warning('No Molecules Loaded!','Please load the\
+                        molecules you wish to do an MCS Search for.')
+            return None
+
+        savedir = QFileDialog.getExistingDirectory(
+            dialog, caption='Save Aligned Molecules to...')
+
+        cwd = os.getcwd()
+        os.chdir(savedir) 
+        
+
+
+        for ob in molObjs:
+            # if there are no rtf files for pymol objects, then try to create them
+            if not os.path.exists(ob+'.str'):
+                return_code = subprocess.call(f"cgenff {ob+'.mol2'} > {ob+'.str'}",shell=True)
+
+                if return_code == 127:
+                    subprocess.run([f"rm {ob+'.str'}"],shell=True,capture_output=True).stdout.decode('utf-8')
+                    load_cgenff_output = subprocess.run([f"module load cgenff"],shell=True,capture_output=True).stdout.decode('utf-8')
+                    print(f"cgenff loading output is {load_cgenff_output}")
+                    which_bash = subprocess.run([f"which bash"],shell=True,capture_output=True).stdout.decode('utf-8')
+                    print(f"which bash is: {which_bash}")
+                    return_code = subprocess.call(f"cgenff {ob+'.mol2'} > {ob+'.str'}",shell=True)
+
+                    if return_code == 127:
+                        show_warning("ParamChem was not found!", "Please install\
+                                    the ParamChem module and alias the tool as 'cgenff'.\
+                                    Otherwise create CHARMM stream files (.str) containing\
+                                    both rtf and prm information.")
+                        return None
+ 
+            cmd.save(ob+'.mol2',selection=ob,format='mol2')
+            truncate_at_names(ob+'.mol2')
+
+        # Create molfile
+        molfile = "mol_list.txt"                  # list of mol2 file names
+        molfiled = "\n".join(molObjs)
+        with open(molfile,'w') as f:
+            f.write(molfiled)      
+
+        # Specify output files 
+        mcsout = 'MCS_for_MSLD.txt'               # MCS output filename
+        outdir = 'build.'+sysname                 # MSLD output directory
+      
+        cgenff = forcefield == 'CGenFF'           # Are CGenFF/ParamChem parameters being used?
+
+        if len(glob.glob(mcsout)) == 0:
+            ## (2) Check molfile and toppar files before getting started
+            msld_chk.MsldCHK(molfile)
+            print("chk finished")
+            os.chdir(savedir)
+            reflig = msld_mcs_rdecomp.MCSS_RDecomp(molfile,mcsout=mcsout)
+            if not reflig:
+                return None
+            print("MCS results printed to "+os.path.join(savedir,mcsout))
+            print("Reference Ligand is "+reflig)
+            vis_check.vis_check(mcsout)
+
+        else:
+            print(f"A previous MCS has been found in: {savedir}")
+            vis_check.vis_check(mcsout)
+            with open(mcsout,'r') as f:
+                mcsinfo = f.readlines()
+                reflig = [line.split()[1] for line in mcsinfo if line.startswith('REFLIG')]
+                
+            print("Reference Ligand is "+reflig[0])
+            print(f"This previous MCS has been loaded.")
+
+        os.chdir(cwd)
+        
+        displayTxt(mcsout)
+
     def run_crn():
         from .msld_py_prep import msld_crn
         from .msld_py_prep import msld_prm
@@ -662,6 +816,7 @@ def make_dialog():
             return None
 
         site = int(site)
+        print(f"Will be moving to site {site}")
  
         mcsout = 'MCS_for_MSLD.txt'
 
@@ -686,7 +841,10 @@ def make_dialog():
             return None
         ind = ind[0]
         mol_ind = mol_names.index(mol_selection)
-        remove_from_core(ind,mol_ind, mol_selection_core_atoms, mol_selection,core_atoms)    
+        remove_from_core(ind,mol_ind, mol_selection_core_atoms, mol_selection,core_atoms,to_site=site-1)
+ 
+        displayTxt(mcsout)
+
         return None 
 
 
@@ -710,10 +868,12 @@ def make_dialog():
         else:
             show_warning("Already at oldest change.","Cannot undo any further.")
 
+        displayTxt(mcsout)
 
     # hook up button callbacks
     form.button_align.clicked.connect(run_align)
     form.button_mcss.clicked.connect(run_mcss)
+    form.button_rdkitmcss.clicked.connect(run_rdkitmcss)
     form.button_crn.clicked.connect(run_crn)
     form.button_moveselectedtosite.clicked.connect(run_moveselectedtosite)
     form.button_undomove.clicked.connect(run_undomove)
