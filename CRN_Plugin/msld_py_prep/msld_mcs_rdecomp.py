@@ -556,7 +556,7 @@ def check_rdkit_loading(mols):
     """
     notsuccessful = list(filter(lambda mol: mols[mol] == None, range(len(mols))))
     if notsuccessful:
-        print("Ligands with indices %s were not loaded successfully into RDKit" % nosuccessful)
+        print("Ligands with indices %s were not loaded successfully into RDKit" % notsuccessful)
         quit()
     else:
         print("All ligands were successfully loaded into RDKit") 
@@ -1002,7 +1002,7 @@ def MCSS_RDecomp(mol_list,mcsout="MCS_for_MSLD.txt"):
     substring = ' '.join([' '.join(str(i)) for i in nsubs])
     print(substring)
     fn = open("MCS_for_MSLD.txt", 'w', newline='')
-    fn.write("""# MCS Search for MSLD (LFC 2020)
+    fn.write("""# MCS Search for MSLD (LFC/JZV 2020)
 # %s molecules processed.
 
 NSUBS %s
@@ -1027,37 +1027,3 @@ CORE
     fn.close()
 
     return molnames[0] 
-
-## To do R Decomposition myself
-"""
-This algorithm assumes each molecule actually contains 
-the scaffold given. It also assumes this scaffold is
-only present once in each molecule
-
-for each molecule:
-1) Identify "anchor" atoms - points of attachment
-    Given a scaffold, iterate through each atom in the molecule
-that belong in the scaffold. Get neighbors and if all neighboring
-atoms are in the scaffold, then discard. Otherwise add to
-anchor atom list [[],[]] list of lists (in case of multiple
-atoms at one R group)
-
-2) Identify number of R sites:
-    Iterate through each anchor atom and look at their neighbors,
-    if the atom has a neighbor in the anchor atom, add anchor
-    atom to touple and eliminate neighbor anchor atom - these belong
-    to the same site.
-
-3) Shortest paths to anchor atoms:
-    Make a list that looks like the anchor atoms list of lists
-    For each atom not in the core, identify the minimum shortest path
-    to each of the anchor atoms identified (if more than one per site, use
-    the first one)
-    Add the atom to the site with the shortest path
-
-Alternative:
-1) Situate atoms not in scaffold
-     
-"""
-# MCSS_RDecomp("mol_list.txt") 
-         

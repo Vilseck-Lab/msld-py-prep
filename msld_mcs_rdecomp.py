@@ -99,7 +99,7 @@ def update_atomtypes(attypes):
     current_ats = get_current_atom_types()
 
     # Update CGenFF_atomtypes for any new atom types 
-    current_ats.append(attypes)
+    current_ats.extend(attypes)
     current_ats = list(set(current_ats))
     if os.path.exists("CGenFF_atomtypes.txt"):
         os.remove("CGenFF_atomtypes.txt")
@@ -136,7 +136,6 @@ def read_rtf(fn):
     CGenFF2Num, Num2CGenFF = code_cgenff("CGenFF_atomtypes.txt")
     Attypes = list(map(lambda x: CGenFF2Num[x], attypes))
     return Attypes, partial_charges, attypes, atnames
-
 
 
 def get_property(fn, prop):
@@ -551,7 +550,7 @@ def check_rdkit_loading(mols):
     """
     notsuccessful = list(filter(lambda mol: mols[mol] == None, range(len(mols))))
     if notsuccessful:
-        print("Ligands with indices %s were not loaded successfully into RDKit" % nosuccessful)
+        print("Ligands with indices %s were not loaded successfully into RDKit" % notsuccessful)
         quit()
     else:
         print("All ligands were successfully loaded into RDKit") 
@@ -734,7 +733,7 @@ CORE
         fout.write(text)
 
 
-def compare_og_lig_charges(mol_list):
+def MCSS_RDecomp(mol_list):
     """
     Function takes in a list of ligands, identifies the common core and
     shows charge distribution of each common core atom across all ligands
@@ -853,7 +852,6 @@ def compare_og_lig_charges(mol_list):
          
         writeMCS(molnames, CoreNames, R_group_names,anchors)
 
-        quit()
     # Fix 2D Depiction of every "core" fragment for every molecule
     for i in range(len(mols)):
         _,_ = fix2DDepiction(groups['Core'][i])
@@ -995,7 +993,7 @@ def compare_og_lig_charges(mol_list):
     substring = ' '.join([' '.join(str(i)) for i in nsubs])
     print(substring)
     fn = open("MCS_for_MSLD.txt", 'w', newline='')
-    fn.write("""# MCS Search for MSLD (LFC 2020)
+    fn.write("""# MCS Search for MSLD (LFC/JZV 2020)
 # %s molecules processed.
 
 NSUBS %s
@@ -1019,38 +1017,4 @@ CORE
     fn.write("END")
     fn.close()
 
- 
-
-## To do R Decomposition myself
-"""
-This algorithm assumes each molecule actually contains 
-the scaffold given. It also assumes this scaffold is
-only present once in each molecule
-
-for each molecule:
-1) Identify "anchor" atoms - points of attachment
-    Given a scaffold, iterate through each atom in the molecule
-that belong in the scaffold. Get neighbors and if all neighboring
-atoms are in the scaffold, then discard. Otherwise add to
-anchor atom list [[],[]] list of lists (in case of multiple
-atoms at one R group)
-
-2) Identify number of R sites:
-    Iterate through each anchor atom and look at their neighbors,
-    if the atom has a neighbor in the anchor atom, add anchor
-    atom to touple and eliminate neighbor anchor atom - these belong
-    to the same site.
-
-3) Shortest paths to anchor atoms:
-    Make a list that looks like the anchor atoms list of lists
-    For each atom not in the core, identify the minimum shortest path
-    to each of the anchor atoms identified (if more than one per site, use
-    the first one)
-    Add the atom to the site with the shortest path
-
-Alternative:
-1) Situate atoms not in scaffold
-     
-"""
-compare_og_lig_charges("mol_list.txt") 
-         
+MCSS_RDecomp("mol_list.txt") 
