@@ -19,7 +19,12 @@ We suggest installing a conda environment built using the `requirements.txt` fil
 
 `conda create --name <env> --file requirements.txt --channel schrodinger`<br>
 
+To activate:
+`conda activate <env>`
+
 This installs the correct pandas version, RDKit, and PyMOL. 
+
+The following are some other considerations:
 
 - Lg_Solvate.sh uses convpdb.pl from the [MMTSB toolset](https://github.com/mmtsb/toolset) <br>
 - vis_check.py is written for use with [PyMOL](https://github.com/schrodinger/pymol-open-source) <br>
