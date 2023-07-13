@@ -420,7 +420,7 @@ def make_dialog():
         for molname in generated_mols:
             # Load mol2 files into pymol
             cmd.load(f"{molname}.mol")
-            # Convert to mol2's
+            # Convert to mol2 format
             cmd.save(f"{molname}.mol2",selection=molname,format="mol2")
             # Change atom naming to 4 characters
             truncate_at_names(f"{molname}.mol2")
@@ -430,6 +430,8 @@ def make_dialog():
             rename_atoms.rename_atoms(molname)  
             # Load mol2 files into pymol
             cmd.load(f"{molname}.mol2")
+            # Save as sdf format as well 
+            cmd.save(f"{molname}.sdf",selection=molname,format="sdf")
 
         if wd:
             os.chdir(originalPath)
