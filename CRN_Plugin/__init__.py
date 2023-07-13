@@ -261,7 +261,6 @@ def write_new_mcsout(to_remove,new_core,site,mcsout='MCS_for_MSLD.txt'):
     
     print(all_site_atoms)
     toRemove = dict(zip(mol_names,to_remove))
-    print(f"Still adding to site {site}")
     mols = list(all_site_atoms[sitee].keys())
     for mol in toRemove.keys():
         if mol in all_site_atoms[sitee].keys():
