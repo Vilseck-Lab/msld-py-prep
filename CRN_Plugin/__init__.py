@@ -467,8 +467,12 @@ def make_dialog():
         # specified
         if dataset:
             if target:
-                if not os.path.exists(os.path.join(savedir,f"{target}.sdf")):
+                try:
+                    os.remove(os.path.join(savedir,f"{target}.sdf"))
                     cmd.save(os.path.join(savedir,f"{target}.sdf"),selection=target,format='sdf')
+                except:
+                    cmd.save(os.path.join(savedir,f"{target}.sdf"),selection=target,format='sdf')
+
                 generate3DMols(dataset,wd=savedir,target=os.path.join(savedir,f"{target}.sdf"))
                 if pattern:
                     # Could modify scripts to add a substructure pattern to align to
