@@ -5,35 +5,73 @@
 ##
 
 import numpy as np
-import glob,os
+import glob
+import os
+import re
+from pandas import read_csv
 
 class CHK_Error(Exception):
     import sys
     sys.exit
 
-def MsldCHK(molfile):
+def MsldCHK(ligcsv, odir, verbosity = 5, names_col = 0, smiles_col = 1, **kwargs):
     """
-    Check the following items:
+    Check the following points in each mol2file:
      - each atom is uniquely named (within a single mol2 file)
      - each mol2 file has an associated rtf file
        (parse ParamChem stream files into rtf/prm files)
+
+    Parameters
+    ----------
+    ligcsv: []
+        csv file with ligand names and their SMILES strings.
+
+    odir: str
+        directory where ligand MOL2, RTF, PRM and STR files are expected to be.
+
+    verbosity: int, default=5
+        level of verbosity
+
     """
 
-    # Load in the file names
-    fp=open(molfile,'r')
-    mols=[]
-    for line in fp:
-        mols.append(line.split()[0]) 
-    fp.close()
+    ligDF = read_csv(ligcsv)
+    mol2flist = [os.path.join(odir,f'{name}.mol2') for name in ligDF.iloc[:,names_col]]
+
+    qrename = False
+    print(kwargs)
+    try:
+        if kwargs['rename_atoms']:
+            import sanitize_mol2
+            qrename = True
+    except KeyError:
+        print('Not renaming atoms in the MOL2 file.')
+        qrename = False
+        pass
+
 
     # Some quick file checks:
-    for mol in range(len(mols)):
+    for mdx,fmol2 in enumerate(mol2flist):
+        
+        molbase = re.sub(r'\.mol2$', '', os.path.basename(fmol2))
+
+        rtfname = os.path.join(os.path.dirname(fmol2), f'{molbase}.rtf')
+        prmname = os.path.join(os.path.dirname(fmol2), f'{molbase}.prm')
+        strname = os.path.join(os.path.dirname(fmol2), f'{molbase}.str')
+
         # Check to make sure the mol2 files exist
-        if len(glob.glob(mols[mol]+'.mol2')) == 0:
-            raise CHK_Error(mols[mol]+'.mol2 does not exist - check and resubmit')
+        # if len(glob.glob(mols[mol]+'.mol2')) == 0:
+        if not os.path.isfile(fmol2):
+            raise CHK_Error(f'{fmol2} does not exist - check and resubmit')
+
+
+        if qrename:   
+            # Uniquely rename atoms (required for PyPrep Scripts)
+            sanitize_mol2.rename_atoms_in_mol2(arg_infile = fmol2) 
+
+
         # Check to see if every atom is uniquely named - exit if not
         chk=0
-        fp=open(mols[mol]+'.mol2','r')
+        fp=open(fmol2,'r')
         line=fp.readline()
         aname=[]
         while line:
@@ -51,20 +89,27 @@ def MsldCHK(molfile):
                 line=fp.readline()
         fp.close()
         if chk:
-            raise CHK_Error(mols[mol]+'.mol2 atom names are NOT unique - fix this in both structure and toppar files - then resubmit')
+            raise CHK_Error(f'{molbase}.mol2 atom names are NOT unique - fix this in both structure and toppar files - then resubmit')
 
         ## If atom names are not unique - you must rename them before
 
         # Check to make sure rtf/prm files exist (parse str files)
-        if len(glob.glob(mols[mol]+'.rtf')) == 0:
+        # if len(glob.glob(mols[mol]+'.rtf')) == 0:
+        if not os.path.exists(rtfname):
+            if verbosity >= 3:
+                print(f'<msld_chk> Expected RTF file for molecule {mdx} [{rtfname}] not found. Looking for STR file as a last ditched effort.')
             # check to see if a ParamChem stream file exists:
-            if len(glob.glob(mols[mol]+'.str')) == 0:
-                raise CHK_Error(mols[mol]+'.rtf does not exist - check and resubmit')
+            # if len(glob.glob(mols[mol]+'.str')) == 0:
+            if not os.path.exists(strname):
+                raise CHK_Error(f'<msld_chk> Expected STR file for molecule {mdx} [{strname}] not found - check and resubmit')
+            
             else:
+                print(f'<msld_chk> Found STR file for molecule {mdx} [{strname}].')
+                print(f'<msld_chk> Writing RTF and PRM files from STR file for molecule {mdx}...')
                 # assume the stream file is from paramchem
-                fp=open(mols[mol]+'.str','r')
-                rp=open(mols[mol]+'.rtf','w')
-                pp=open(mols[mol]+'.prm','w')
+                fp = open(strname, 'r') #fp=open(mols[mol]+'.str','r')
+                rp = open(rtfname, 'w') #rp=open(mols[mol]+'.rtf','w')
+                pp = open(prmname, 'w') #pp=open(mols[mol]+'.prm','w')
 
                 line=fp.readline()
                 while line:
@@ -92,8 +137,9 @@ def MsldCHK(molfile):
                 pp.close()
 
         # Check that atom names in the mol2 file match the atom names in the rtf
+        print(f'<msld_chk> Checking for unmatched atom names in the MOL2 and RTF of molecule {mdx}...')
         a2name=[]
-        fp=open(mols[mol]+'.rtf','r')
+        fp= open(rtfname, 'r')  #open(mols[mol]+'.rtf','r')
         for line in fp:
             if line[0:4] == 'ATOM':
                 a2name.append(line.split()[1])
@@ -105,8 +151,9 @@ def MsldCHK(molfile):
                 if at1 == at2:
                     cnt+=1
         if cnt != len(aname):
-            raise CHK_Error('Atom names in '+mols[mol]+'.mol2 do not match those found in '+mols[mol]+'.rtf! Check and resubmit.')
+            raise CHK_Error(f'Atom names in {fmol2} do not match those found in {rtfname}! Check and resubmit.')
 
+        print(f'<msld_chk> Check for molecule {mdx} passed.\n\n')
         # mols[mol] ready to go
 
     return

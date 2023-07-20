@@ -8,18 +8,19 @@ import numpy as np
 import pandas as pd
 from copy import deepcopy
 import os
+import yaml
 
 class CRN_Error(Exception):
     import sys
     sys.exit
 
-def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=False,ll=True):
+def MsldCRN(mcsout,outdir,inFrag,AnCore, ChkQChange=True,verbosity=False,debug=False,ll=True):
     """
     Using the information within mcsout, as well as previously supplied mol2 and toppar
     files, perform charge renormalization to generate MSLD suitable force field parameters
 
     Use ChkQChange=True to check for charge perturbations between different substituents
-    Use verbose=True to get extra output
+    Use verbosity=True to get extra output
     Use debug=True to get LOTS of extra output
     Use ll=True to build the "large_lig.pdb" file needed for easy solvation with Lg_Solvate.sh
     """
@@ -31,6 +32,40 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     Aatoms=[]    # list of lists of anchor atom names (same indexing as mols)
     frags=[]     # list of lists of file names for the fragments
     Fatoms=[]    # list of lists of the fragment atom names
+    
+    with open(mcsout, 'r') as fmcs:
+        mcsDict = yaml.safe_load(fmcs)
+    
+    mols = mcsDict['MOLS']
+    print('<msld_crn> Molecules: ', mols)
+
+    ligdir = mcsDict['PATH']
+    print('<msld_crn> Ligand files to be found in: ', ligdir )
+
+    cores = [mcsDict['CORE'][mol] for mol in mols]
+    print('<msld_crn> Core Atoms: ', cores)
+
+    Aatoms = [mcsDict['ANCHOR ATOMS'][mol] for mol in mols]
+    print('<msld_crn> Anchor atoms: ', Aatoms)
+
+    reflig = mcsDict['REFLIG']
+    print('<msld_crn> REFLIG: ', reflig)
+
+    nsubs = mcsDict['NSUBS']
+    print('<msld_crn> NSUBS: ', nsubs)
+
+    for site in range(len(nsubs)):
+        frags.append([])
+        Fatoms.append([])
+        for k, v in mcsDict[f'SITE {(site+1):d} FRAGMENTS'].items():
+            frags[site].append(k)
+            Fatoms[site].append(v)
+
+    nsites = len(nsubs)
+    print('<msld_crn> Frags: ', frags)
+    print('<msld_crn> Fatoms: ', Fatoms)
+
+    """
     fp=open(mcsout,'r')
     line=fp.readline()
     nsites=0
@@ -71,15 +106,26 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
         line=fp.readline()
     fp.close()
     if nsites != len(nsubs):
-        raise CRN_Error('Mismatch on the # of sites - check and resubmit')
+        raise CRN_Error('<msld_crn> Mismatch on the # of sites - check and resubmit')
+    """
 
     # transform cores into a DataFrame (DF) with reflig column headers and mols indices
-    refnum=0
-    for mol in range(len(mols)):
-        if mols[mol] == reflig:
-            refnum=mol
-            break
-    coreheader=cores[refnum]
+    try:
+        refMolIdx = mols.index(reflig)
+        if debug:
+            print(f'REFNUM is {refMolIdx}')
+    except ValueError:
+        raise ValueError(f'Molecule with name {reflig} not found in the list of molecules in the YAML file.')
+
+    # refMolIdx=0
+    # for mol in range(len(mols)):
+    #     if mols[mol] == reflig:
+    #         refMolIdx=mol
+    #         break
+
+    coreheader=cores[refMolIdx]
+    if debug:
+        print('coreheader:',coreheader)
     cores=pd.DataFrame(cores,columns=coreheader,index=mols,dtype=str)
 
     if debug:
@@ -96,6 +142,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
 
     #################################################################
     ## Read the information from each *.rtf
+    print(f'<msld_crn> Reading information from RTF file for each ligand.')
     rtfinfo=[]   # list of dictionary infomation
     rtfvers1=36  # rtf version info
     rtfvers2=1
@@ -105,9 +152,15 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
         #rtfinfo.append({'NAME':mol,'QNET':0,'MASS':[],'ATOM':[],'BOND':[],'IMPR':[],'ATTYPE':{},'ATQ':{}})
         rtfinfo.append({'NAME':mol,'QNET':0,'MASS':[],'ATTYPE':{},'ATQ':{},'BOND':[],'IMPR':[],'LP':[]})
     
-        fp=open(mol+'.rtf','r')
+        try:    
+            molrtf = os.path.join(ligdir, f'{mol}.rtf')
+            fp=open(molrtf,'r')
+            print(f'Opening RTF file {molrtf} for atom information...')
+        except FileNotFoundError:
+            raise FileNotFoundError(f'No RTF file for molecule {mol} found.')
+
         line=fp.readline()
-        if line[0] == '*' and mol == refnum:
+        if line[0] == '*' and mol == refMolIdx:
             while line:  # look for the charmm ff version # (assuming it directly follows the title lines)
                 line=fp.readline()
                 if line[0] != '*':
@@ -122,15 +175,17 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                     rtfinfo[-1]['MASS'].append(lns[2:])
                     line=fp.readline()
             if line[0:4] == 'RESI':
-                rtfinfo[-1]['QNET']=line.split()[2]
+                # rtfinfo[-1]['QNET']=line.split()[2]
+                rtfinfo[-1]['QNET'] = float(line.split()[2])
                 line=fp.readline()
             if line[0:4] == 'ATOM':
                 while line[0:4] == 'ATOM':
                     lns=line.split()
                     #rtfinfo[-1]['ATOM'].append(lns[1:4])
                     rtfinfo[-1]['ATTYPE'][lns[1]]=lns[2]
-                    rtfinfo[-1]['ATQ'][lns[1]]=lns[3]
+                    rtfinfo[-1]['ATQ'][lns[1]]=float(lns[3]) #lns[3]
                     line=fp.readline()
+
             if line[0:4] == 'BOND':
                 while line[0:4] == 'BOND':
                     lns=line.split()
@@ -177,10 +232,10 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                                 Fatoms[site][frag].append(lp[0])
 
     # Add Core LPs into cores
-    coreLPs=pd.DataFrame(coreLPs,columns=coreLPs[refnum],index=mols,dtype=str)
+    coreLPs=pd.DataFrame(coreLPs,columns=coreLPs[refMolIdx],index=mols,dtype=str)
     if not coreLPs.empty:
         for lp in range(coreLPs.shape[1]):
-            cores[coreLPs.iloc[refnum][lp]]=coreLPs.iloc[:,lp]
+            cores[coreLPs.iloc[refMolIdx][lp]]=coreLPs.iloc[:,lp]
 
     if debug:
         # print LP info
@@ -201,7 +256,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     #for at in cores.loc[reflig][:]:
     for at in coreheader:
         Hcore[at]=[]
-        for bd in rtfinfo[refnum]['BOND']:
+        for bd in rtfinfo[refMolIdx]['BOND']:
             if at in bd:
                 if at[0] != 'H' and bd[0][0] == 'H':
                     Hcore[at].append(bd[0])
@@ -226,32 +281,37 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     ## the core - otherwise, they are (by default) moved onto the frags
 
     # check for correct formats for inFrag and AnCore
+    """
     crtfrm='['
     for site in range(nsites):
         crtfrm+='[]'
         if site != (nsites-1):
             crtfrm+=','
     crtfrm+=']'
+    """
     if len(inFrag) != nsites:
         # if it isn't right, print an error message and setup a default inFrag variable to continue with
-        print("\ninFrag is not specified correctly!! It should look like this: "+crtfrm)
-        print("A default (empty) value will be used, but this may not yield the results you want")
+        print("\n")
+        print(f"<msld_crn> inFrag is not specified correctly!! It should look like this: [[],[],...,[]]")
+        print("<msld_crn> A default (empty) value will be used, but this may not yield the results you want")
         inFrag=[]
         for site in range(nsites):
             inFrag.append([])
     if len(AnCore) != nsites:
         # if it isn't right, print an error message and setup a default inFrag variable to continue with
-        print("\nAnCore is not specified correctly!! It should look like this: "+crtfrm)
-        print("A default (empty) value will be used, but this may not yield the results you want")
+        print("\n")
+        print(f"<msld_crn> AnCore is not specified correctly!! It should look like this: [[],[],...,[]]")
+        print("<msld_crn> A default (empty) value will be used, but this may not yield the results you want")
         AnCore=[]
         for site in range(nsites):
             AnCore.append([])
+    
     # create list of atoms to move out of the core (add in Aatoms by default)
     droplist=[]
-    for at in range(len(Aatoms[refnum])):
+    for at in range(len(Aatoms[refMolIdx])):
         droplist.append([])
-        if Aatoms[refnum][at] != 'DUM':
-            droplist[-1].append(Aatoms[refnum][at])
+        if Aatoms[refMolIdx][at] != 'DUM':
+            droplist[-1].append(Aatoms[refMolIdx][at])
     # add in any inFrag atoms 
     for site in range(nsites):
         if len(inFrag[site]) > 0:
@@ -282,6 +342,8 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     drops=cores[flatlist]               # DF of droplist atoms extracted from cores
     cores=cores.drop(columns=flatlist)  # cores is modified to remove droplist atoms
     coreheader=list(cores.columns.values)
+    print('<msld_crn> coreheader after dropping: ', coreheader)
+    
     for site in range(nsites):
         for frag in range(len(frags[site])):
             for at in droplist[site]:
@@ -308,25 +370,27 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     Qcut=5.0         # provide a warning for large charge diffs in the core
 
     # check for charge perturbations
-    qnet=float(rtfinfo[refnum]['QNET'])
+    qnet=float(rtfinfo[refMolIdx]['QNET'])
     delQ=[]    # list of charge change boolean
     for mol in range(len(mols)):
         delQ.append(False) # Charge Change boolean
-        if float(rtfinfo[mol]['QNET']) != float(qnet):
-            print("We have a charge change between the reflig ("+mols[refnum]+' and '+mols[mol]+').',\
-                  "ref_qnet = "+str(qnet),"; mol_qnet = "+rtfinfo[mol]['QNET'])
+        if float(rtfinfo[mol]['QNET']) != qnet:
+            print(f"<msld_crn> We have a charge change between the reflig ({mols[refMolIdx]} and {mols[mol]}).",\
+                  f"ref_qnet = {str(qnet)}",\
+                  f"; mol_qnet = {rtfinfo[mol]['QNET']}")
             if not ChkQChange:
                 print("    ***  Recommended to turn ON the ChkQChange option !!  ***")
             delQ[mol]=True
 
     #(1) Gather and Average Core Charges 
     Qcore=pd.DataFrame(np.zeros((cores.shape[0]+2,cores.shape[1])),columns=coreheader,index=mols+['mean','stdev'],dtype=float)
+    print(coreheader, Qcore)
     for mol in range(len(mols)):
         for at in range(len(cores.iloc[mol][:])):
             Qcore.iloc[mol][at]=rtfinfo[mol]['ATQ'][cores.iloc[mol][at]]
     for col in Qcore:
-        Qcore.loc['mean',col]=float(str(np.around(np.average(Qcore.loc[mols,col]),decimals=dec)))
-        Qcore.loc['stdev',col]=float(str(np.around(np.std(Qcore.loc[mols,col]),decimals=dec)))
+        Qcore.loc['mean',col]=np.around(np.average(Qcore.loc[mols,col]),decimals=dec)
+        Qcore.loc['stdev',col]=np.around(np.std(Qcore.loc[mols,col]),decimals=dec)
     if debug:
         print(Qcore)
         print()
@@ -336,7 +400,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     Qfrag=[]
     Qint=[]
     siteavg=[]
-    if verbose:
+    if verbosity:
         print("\nFragment Charge Differences Following Charge ReNormalization:")
     for site in range(nsites):
         sitesum=[]
@@ -350,32 +414,34 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
             for at in Fatoms[site][frag]:
                 Qfrag[site][frag][at]=rtfinfo[mol]['ATQ'][at]
             # get the total charge of each fragment at each site, the mean, and start to renormalize charge
-            sitesum.append(float(str(np.around(Qfrag[site][frag].sum(),decimals=dec))))
+            print('Error >>>>>>>>>: ', (Qfrag[site][frag]).to_numpy(dtype = float))
+            sitesum.append(np.around(Qfrag[site][frag].to_numpy(dtype = float).sum(),decimals=dec))
 
-        if ChkQChange and verbose:
-            print("Charge Change Chk:","old sitesum",sitesum)
+        if ChkQChange and verbosity >= 4:
+            print("<msld_crn> Charge Change Chk:","old sitesum",sitesum)
         # check for charge changes; if found - remove the nearest int charge and crn
         QQ=[0 for q in sitesum]
         if ChkQChange:
             orig_sitesum=deepcopy(sitesum)
-            molQs = [rtfinfo[mol]['QNET'] == rtfinfo[refnum]['QNET'] for mol in range(len(mols))]
+            molQs = [rtfinfo[mol]['QNET'] == rtfinfo[refMolIdx]['QNET'] for mol in range(len(mols))]
             if not all(molQs):
                 QQ=np.rint(sitesum) # round to nearest integer with numpy
                 QQ=[int(q) for q in QQ]
                 sitesum=[sitesum[q]-float(QQ[q]) for q in range(len(sitesum))]
                 # get majority Qint
-                Qint.append(float(str(np.around(np.rint(np.asarray(QQ).mean()),decimals=2))))
-        if ChkQChange and verbose:
-            print("Charge Change Chk:","Qs round to these integers",QQ)
-            print("Charge Change Chk:","new sitesum",sitesum)
-            print(" ")
+                Qint.append(np.around(np.rint(np.asarray(QQ).mean()),decimals=2))
+        if ChkQChange and verbosity >= 4:
+            print("<msld_crn> Charge Change Chk:","Qs round to these integers",QQ)
+            print("<msld_crn> Charge Change Chk:","new sitesum",sitesum)
+            print("\n")
 
         # avg the sitesums, and progressively CRN each fragment atom
-        siteavg.append(float(str(np.around(np.asarray(sitesum).mean(),decimals=dec))))
-        if verbose:
-            print("Site "+str(site+1)+" Q(avg) = "+str(siteavg[site]))
+        siteavg.append(np.around(np.asarray(sitesum).mean(),decimals=dec))
+        if verbosity >= 0:
+            print(f"Site {(site+1)} Q(avg) = {siteavg[site]}")
+
         for frag in range(len(frags[site])):
-            qdiff=float(str(np.around(siteavg[site]-sitesum[frag],decimals=dec)))
+            qdiff = np.around(siteavg[site]-sitesum[frag],decimals=dec)
             foffset=offset
             if qdiff < 0.0:
                 foffset=foffset*-1.0
@@ -396,34 +462,37 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                 atom+=1
             # check that total frag charge matches siteavg[site]
             if ChkQChange:
-                qchk=float(str(np.around(Qfrag[site][frag].sum()-float(QQ[frag]),decimals=dec)))
+                qchk=np.around(Qfrag[site][frag].to_numpy(dtype = float).sum()-float(QQ[frag]),decimals=dec)
             else:
-                qchk=float(str(np.around(Qfrag[site][frag].sum(),decimals=dec)))
+                qchk=np.around(Qfrag[site][frag].to_numpy(dtype = float).sum(),decimals=dec)
+
             #print(frags[site][frag],qchk,str(qchk),str(qchk)=='-0.0')
-            if str(qchk) == '-0.0':    
-                qchk = float(0.0)   
+            # if str(qchk) == '-0.0':    
+            #     qchk = float(0.0)   
+
             #print(frags[site][frag],qchk,str(qchk))
-            if str(qchk) != str(siteavg[site]):
+            if qchk != siteavg[site]:
                 raise CRN_Error('Error for fragment CRN for site '+str(site+1)+', frag = '+frags[site][frag]+
                 ". Total charge ("+str(qchk)+") doesn't match the site average ("+str(siteavg[site])+") ")
             else:
-                if verbose:
+                if verbosity >= 0:
                     if sitesum[frag] == 0.0:
-                        pdiff=float(str(np.around(qdiff*100.0,decimals=2)))
+                        pdiff=np.around(qdiff*100.0,decimals=2)
                     else:
-                        pdiff=float(str(np.around(qdiff/sitesum[frag]*100.0,decimals=2)))
-                    print("  "+frags[site][frag]+" Q(diff from avg) = "+str(qdiff)+
-                          " Q(orig) = ",end='')
+                        pdiff=np.around(qdiff/sitesum[frag]*100.0,decimals=2)
+                    print(f"<msld_crn>   {frags[site][frag]} Q(diff from avg) = {qdiff} Q(orig) = ",end='')
+                    
                     if ChkQChange:
-                        print(str(orig_sitesum[frag]),end='')
+                        print(orig_sitesum[frag],end='')
                     else:
-                        print(str(sitesum[frag]),end='')
-                    print(" (a "+str(pdiff)+"% diff from orig charges)",end='')
+                        print(sitesum[frag],end='')
+
+                    print(f" (a {pdiff}% diff from orig charges)",end='')
                     if abs(pdiff) > Qcut:
                         print(" ** CHECK")
                     else:
                         print("")
-        if verbose:
+        if verbosity >= 0:
             print("")
 
 
@@ -444,11 +513,11 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     # extract current core (mean) charges
     QQ=pd.Series(Qcore.loc['mean'][:])
     # figure out the difference between the reflig's charge and current site charges
-    sitesum=float(str(np.around(np.sum(siteavg),decimals=dec)))  # sum of all site charges
-    intsum=float(str(np.around(np.sum(Qint),decimals=dec)))
-    QQsum=float(str(np.around(QQ.sum(),decimals=dec)))      # sum of core (mean) charges
-    tsum=float(str(np.around(QQsum+sitesum+intsum,decimals=dec)))  # total charge of msld ligand
-    qdiff=float(str(np.around(float(rtfinfo[refnum]['QNET'])-tsum,decimals=dec)))
+    sitesum=np.around(np.sum(siteavg),decimals=dec) # sum of all site charges
+    intsum=np.around(np.sum(Qint),decimals=dec)
+    QQsum=np.around(QQ.to_numpy(dtype = float).sum(),decimals=dec)     # sum of core (mean) charges
+    tsum=np.around(QQsum+sitesum+intsum,decimals=dec)  # total charge of msld ligand
+    qdiff=np.around(float(rtfinfo[refMolIdx]['QNET'])-tsum,decimals=dec)
 
     coffset=offset
     if qdiff < 0.0:
@@ -456,7 +525,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     nsteps=int(np.around(qdiff/coffset,decimals=0)) # should be a positive int
 
     if debug: 
-        print("ideal total charge = ",rtfinfo[refnum]['QNET'])
+        print("ideal total charge = ",rtfinfo[refMolIdx]['QNET'])
         print("site averages = ",siteavg)
         print("sitesum = ",sitesum)
         print("intsum = ",intsum)
@@ -488,30 +557,30 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
         QQ[atom]+=coffset
         atom+=1
     # check that total core charges match the neg of sitesum (+qnet accounts for charged molecules)
-    qchk=float(str(np.around(-1*QQ.sum(),decimals=dec)))
-    sitechk=float(str(np.around(sitesum+intsum-qnet,decimals=dec)))
+    qchk=np.around(-1*QQ.to_numpy(dtype=float).sum(),decimals=dec)
+    sitechk=np.around(sitesum+intsum-qnet,decimals=dec)
     if debug: 
         print("QCHK",qchk) 
         print("SiteCHK",sitechk) 
         print("Qnet",qnet) 
-    if str(qchk) == '-0.0':
-        qchk = 0.0
-    if str(qchk) != str(sitechk):
-        raise CRN_Error("Error for core CRN. Total charge ("+str(qchk*-1)+
-                        ") doesn't neutralize site charge sums ("+str(sitesum)+") ")
+    
+    # if str(qchk) == '-0.0':
+    #     qchk = 0.0
+    if qchk != sitechk:
+        raise CRN_Error(f"<msld_crn> Error for core CRN. Total charge ({(qchk*-1)}) doesn't neutralize site charge sums {sitesum}")
     else:
-        if verbose:
-            print("Core Q(sum) = "+str(qchk*-1))
+        if verbosity >= 0:
+            print(f"Core Q(sum) = {(-1 * qchk)}")
             if QQsum == 0.0:
                 pdiff=0.0
             else:
-                pdiff=float(str(np.around(qdiff/QQsum*100,decimals=2)))
-            print("  Q(orig) = "+str(QQsum)+" (a "+str(pdiff)+"% diff from orig charges)",end='')
+                pdiff=np.around(qdiff/QQsum*100,decimals=2)
+            print(f"<msld_crn>  Q(orig) = {QQsum} (a {pdiff}% diff from orig charges)",end='')
             if abs(pdiff) > Qcut:
                 print(" ** CHECK")
             else:
                 print("")
-    if verbose:
+    if verbosity >= 0:
         print("")
 
     if debug:
@@ -522,14 +591,16 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     
     #################################################################
     ## Check that the output directory exists - mkdir if not
-    os.system('if [ ! -d '+outdir+' ]; then mkdir '+outdir+'; fi')
+    # os.system('if [ ! -d '+outdir+' ]; then mkdir '+outdir+'; fi')
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
 
 
     #################################################################
     ## Read the information from each *.mol2 & write the *.pdb files
     ## and rename all atom names to a standardized format
     ## (only read the information you need:
-    ##    - core from reflig/refnum
+    ##    - core from reflig/refMolIdx
     ##    - frags from frags[site] files
 
     segid='LIG'     # segid for the ligand
@@ -548,7 +619,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     # read in the XYZ coords for the core
     coreXYZ={}
     coreEmt={} # store sybil atom types for better element deduction
-    fp=open(reflig+'.mol2','r')
+    fp=open(os.path.join(ligdir,f'{reflig}.mol2'),'r')
     line=fp.readline()
     while line:
         if line[0:13] == '@<TRIPOS>ATOM':
@@ -563,10 +634,11 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
         else:
             line=fp.readline()
     fp.close()
+
     # translate atom names into standardized format
     Ctrans={}  # translation dictionary between old (key) and new (value)
     if len(coreheader) > 200:
-        raise CRN_Error("Can't handle more than 200 core atoms")
+        raise CRN_Error("<msld_crn> Can't handle more than 200 core atoms")
     pnum=[1,65,48]  # chr(65) == 'A' (ord('A') == 65); chr(48) = '0'
     for at in coreheader:
         # use function to get atomic symbol
@@ -596,7 +668,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
         Ctrans[at]=newat
     # write core.pdb (atom order does not matter - but put H's after heavy atoms anyways)
     added=[]
-    fp=open(outdir+'/core.pdb','w')
+    fp=open(os.path.join(outdir,'core.pdb'),'w')
     row=0
     for at in coreheader:
         if at[0] == 'H':
@@ -630,7 +702,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
             # read in the fragment XYZ coords
             fragXYZ={}
             fragEmt={} # store sybil atom types for better element deduction
-            fp=open(frags[site][frag]+'.mol2','r')
+            fp=open(os.path.join(ligdir,f'{frags[site][frag]}.mol2'),'r')
             line=fp.readline()
             while line:
                 if line[0:13] == '@<TRIPOS>ATOM':
@@ -645,10 +717,12 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                 else:
                     line=fp.readline()
             fp.close()
+            
             # identify mol # that equals frag #
             for mol in range(len(mols)):
                 if mols[mol] == frags[site][frag]:
                     break
+
             # identify H atoms bonded to heavy atoms (in each fragment)
             Hfrag[site].append({})
             for at in Fatoms[site][frag]:
@@ -684,11 +758,11 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                 else:
                     newname=getElementSymbol(fragEmt[at])
                 if len(newname) > 3:
-                    raise CRN_Error("Error in determining atomic symbol for atom "+at+" in "+frags[site][frag])
+                    raise CRN_Error("<msld_crn> Error in determining atomic symbol for atom "+at+" in "+frags[site][frag])
                 char=len(newname)
                 if char == 1: # single char element
                     if pnum[0] > 999:
-                        raise CRN_Error("Too many single char elements in ligand (max=1000)")
+                        raise CRN_Error("<msld_crn> Too many single char elements in ligand (max=1000)")
                     if pnum[0] < 10:
                         newat=newname+'00'+str(pnum[0])
                     elif pnum[0] > 9 and pnum[0] < 100:
@@ -702,17 +776,17 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                         pnum[1]=65
                         pnum[2]+=1
                     if pnum[2] > 57:
-                        raise CRN_Error("Too many double char elements in ligand (max=260)")
+                        raise CRN_Error("<msld_crn> Too many double char elements in ligand (max=260)")
                     else:
                         newat=newname+chr(pnum[2])+chr(pnum[1])
                     pnum[1]+=1
                 else:
-                    raise CRN_Error("Error in Frag atom name translation")
+                    raise CRN_Error("<msld_crn> Error in Frag atom name translation")
                 Ftrans[site][frag][at]=newat
 
             # write the site[site]_sub[frag].pdb file
             added=[]
-            fp=open(outdir+'/site'+str(site+1)+'_sub'+str(frag+1)+'_frag.pdb','w')
+            fp=open(os.path.join(outdir,f'site{(site+1)}_sub{(frag+1)}_frag.pdb'),'w')
             row=0
             for at in Fatoms[site][frag]:
                 if at[0] == 'H':
@@ -737,50 +811,53 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
             fp.close()
  
     # write translation file for old to new atom names
-    filename='translation.txt'
-    fp=open(filename,'w')
-    fp.write("Original Atom Name -> New Atom Name\n")
-    fp.write("CORE\n")
-    for at in coreheader:
-        fp.write("%s %s\n" % (at,Ctrans[at]))
-    fp.write("\n")
-    # also do it for the fragments
-    for site in range(nsites):
-        for frag in range(len(frags[site])):
-            fp.write("SITE %d %s (from %s)\n" % (site+1,'site'+str(site+1)+'_sub'+str(frag+1),frags[site][frag]))
-            for at in Fatoms[site][frag]:
-                fp.write("%s %s\n" % (at,Ftrans[site][frag][at]))
-            fp.write("\n")
+    filename=os.path.join(outdir,'translation.txt')
+    with open(filename,'w') as fp:
+        fp.write("Original Atom Name -> New Atom Name\n")
+        fp.write("CORE\n")
+        for at in coreheader:
+            fp.write(f"{at} {Ctrans[at]}\n")
         fp.write("\n")
-    fp.close()
-    if verbose:
-        print("\nOld to New Atom Name Translations found in: "+filename)
-        print("MSLD Files Written Into: "+outdir)
+
+        # also do it for the fragments
+        for site in range(nsites):
+            for frag in range(len(frags[site])):
+                fp.write("SITE %d %s (from %s)\n" % (site+1,'site'+str(site+1)+'_sub'+str(frag+1),frags[site][frag]))
+                for at in Fatoms[site][frag]:
+                    fp.write(f"{at} {Ftrans[site][frag][at]}\n")
+                fp.write("\n")
+            fp.write("\n")
+
+
+    if verbosity >= 3:
+        print(f"\n<msld_crn> Old to New Atom Name Translations found in: {filename}")
+        print(f"<msld_crn> MSLD Files Written Into: {outdir}")
         print()
 
     # make a "large_lig.pdb" file for easier solv_prep preparation
     if ll:
-        fp=open(outdir+'/large_lig.pdb','w')
+        fp=open(os.path.join(outdir,'large_lig.pdb'),'w')
         # add the core
-        ip=open(outdir+'/core.pdb','r')
-        for line in ip:
-            if line[0:4] == 'ATOM':
-                fp.write(line)
-        ip.close()
+        with open(os.path.join(outdir,'core.pdb'),'r') as ip:
+            for line in ip:
+                if line[0:4] == 'ATOM':
+                    fp.write(line)
+
         # add the largest fragment at each site
         for site in range(nsites):
             maxnum=0
             maxfrag=1
             for frag in range(len(frags[site])):
                 if len(Fatoms[site][frag]) > maxnum:
-                    print("maxnum from",'site'+str(site+1)+'_sub'+str(frag+1)+'_frag.pdb')
+                    print(f"<msld_crn> maxnum from site{(site+1)}_sub{(frag+1)}_frag.pdb")
                     maxnum=len(Fatoms[site][frag])
                     maxfrag=frag
-            ip=open(outdir+'/site'+str(site+1)+'_sub'+str(maxfrag+1)+'_frag.pdb','r')
-            for line in ip:
-                if line[0:4] == 'ATOM':
-                    fp.write(line)
-            ip.close()
+
+            with open(os.path.join(outdir,f'site{(site+1)}_sub{(maxfrag+1)}_frag.pdb'),'r') as ip:
+                for line in ip:
+                    if line[0:4] == 'ATOM':
+                        fp.write(line)
+
         fp.write("TER\nEND")
         fp.close()
 
@@ -789,12 +866,12 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     ## Write *.rtf 
 
     # write core.rtf
-    fp=open(outdir+'/core.rtf','w')
+    fp=open(os.path.join(outdir,'core.rtf'),'w')
     fp.write('* ligand core rtf file generated with msld_py_prep for MSLD (JV,LC)\n')
     fp.write('* (core from %s)\n* \n' % (reflig))
     fp.write('  %d %d\n' % (rtfvers1,rtfvers2))
 
-    lp=open(outdir+'/lpsites.inp','w')
+    lp=open(os.path.join(outdir,'lpsites.inp'),'w')
     lp.write("* Load LP Site Definitions (if applicable)\n*\n\n")
 
     # add in mass statements if there are any and remove redundancies
@@ -802,14 +879,15 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
 
     # core mass statements first
     addlist=[]
-    tmplist=[x[0] for x in rtfinfo[refnum]['MASS']]  # generate tmp list of all atom types with mass statements
+    tmplist=[x[0] for x in rtfinfo[refMolIdx]['MASS']]  # generate tmp list of all atom types with mass statements
+
     for at in coreheader:
-        for type in range(len(tmplist)):
-            if rtfinfo[refnum]['ATTYPE'][at] == tmplist[type]:
-                if not (rtfinfo[refnum]['ATTYPE'][at] in addlist):
-                    addlist.append(rtfinfo[refnum]['ATTYPE'][at])
-                    fp.write("MASS -1 %s %s %s\n" % (rtfinfo[refnum]['MASS'][type][0],
-                             rtfinfo[refnum]['MASS'][type][1],rtfinfo[refnum]['MASS'][type][2]))
+        for tmpval in range(len(tmplist)):
+            if rtfinfo[refMolIdx]['ATTYPE'][at] == tmplist[tmpval]:
+                if not (rtfinfo[refMolIdx]['ATTYPE'][at] in addlist):
+                    addlist.append(rtfinfo[refMolIdx]['ATTYPE'][at])
+                    fp.write("MASS -1 {:s} {:s} {:s}\n".format(*rtfinfo[refMolIdx]['MASS'][tmpval][0:3]))
+    
     # frag mass statements second
     for site in range(nsites):
         for frag in range(len(frags[site])):
@@ -820,25 +898,26 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
             tmplist=[x[0] for x in rtfinfo[mol]['MASS']]
             # loop over atoms in each frag
             for at in Fatoms[site][frag]:
-                for type in range(len(tmplist)):
-                    if rtfinfo[mol]['ATTYPE'][at] == tmplist[type]:
+                for tmpval in range(len(tmplist)):
+                    if rtfinfo[mol]['ATTYPE'][at] == tmplist[tmpval]:
                         if not (rtfinfo[mol]['ATTYPE'][at] in addlist):
                             addlist.append(rtfinfo[mol]['ATTYPE'][at])
-                            fp.write("MASS -1 %s %s %s\n" % (rtfinfo[mol]['MASS'][type][0],
-                                     rtfinfo[mol]['MASS'][type][1],rtfinfo[mol]['MASS'][type][2]))
+                            fp.write("MASS -1 {} {} {}\n".format(*rtfinfo[mol]['MASS'][tmpval][0:3]))
+    
     # continue with core.rtf atom block
     fp.write("\n")
     fp.write("RESI  %s    %5.3f\n" % (segid,qchk*-1))  # Writes the core net charge only 
     fp.write("GROUP \n")  # Not subdivided (an exercise left to the user if needed)
+    print('COREHEADER: ', coreheader)
     for at in coreheader:
         if at[0] == 'H':
             pass
         elif at[0] == 'L': # if at[0:2] == 'LP':
             # LP atoms added, but no Hcore checks
-            #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at],rtfinfo[refnum]['ATTYPE'][at],QQ.loc[at]))
-            fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at],rtfinfo[refnum]['ATTYPE'][at],QQ.loc[at]))
+            #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at],rtfinfo[refMolIdx]['ATTYPE'][at],QQ.loc[at]))
+            fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at],rtfinfo[refMolIdx]['ATTYPE'][at],QQ.loc[at]))
             # Figure out the "lonepair coli" data and print it to lpsites.inp
-            for ln in rtfinfo[refnum]['LP']:
+            for ln in rtfinfo[refMolIdx]['LP']:
                 if ln[0] == at:
                     lp.write("LONEPAIR COLI sele atom @ligseg @resnum %s end -\n" % (Ctrans[ln[0]]))
                     lp.write("              sele atom @ligseg @resnum %s end -\n" % (Ctrans[ln[1]]))
@@ -846,18 +925,19 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                     #lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],ln[6])) # doesn't work with CGenFF
                     lp.write("         DIST %s SCAL %s\ncoor shake\n\n" % (ln[4],'0.00'))
         else:
-            #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at],rtfinfo[refnum]['ATTYPE'][at],QQ.loc[at]))
-            fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at],rtfinfo[refnum]['ATTYPE'][at],QQ.loc[at]))
+            #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at],rtfinfo[refMolIdx]['ATTYPE'][at],QQ.loc[at]))
+            fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at],rtfinfo[refMolIdx]['ATTYPE'][at],QQ.loc[at]))
             # check for bonded H's
             if len(Hcore[at]) > 0:
                 for at2 in Hcore[at]:
-                    #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at2],rtfinfo[refnum]['ATTYPE'][at2],QQ.loc[at2]))
-                    fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at2],rtfinfo[refnum]['ATTYPE'][at2],QQ.loc[at2]))
+                    #fp.write("ATOM %-4s %-6s %9.5f \n" % (Ctrans[at2],rtfinfo[refMolIdx]['ATTYPE'][at2],QQ.loc[at2]))
+                    fp.write("ATOM %-4s %-6s %10.6f \n" % (Ctrans[at2],rtfinfo[refMolIdx]['ATTYPE'][at2],QQ.loc[at2]))
+    
     # core.rtf bond & impr lines
-    for bd in rtfinfo[refnum]['BOND']:
+    for bd in rtfinfo[refMolIdx]['BOND']:
         if (bd[0] in coreheader) and (bd[1] in coreheader):
             fp.write("BOND %-4s %-4s\n" % (Ctrans[bd[0]],Ctrans[bd[1]]))
-    for impr in rtfinfo[refnum]['IMPR']:
+    for impr in rtfinfo[refMolIdx]['IMPR']:
         if (impr[0] in coreheader) and (impr[1] in coreheader) and \
            (impr[2] in coreheader) and (impr[3] in coreheader):
             fp.write("IMPR %-4s %-4s %-4s %-4s\n" % (Ctrans[impr[0]],Ctrans[impr[1]],\
@@ -873,15 +953,15 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                 if mols[mol] == frags[site][frag]:
                     break
             # write atom block
-            fp=open(outdir+'/site'+str(site+1)+'_sub'+str(frag+1)+'_pres.rtf','w')
+            fp=open(os.path.join(outdir,f'site{(site+1)}_sub{(frag+1)}_pres.rtf'),'w')
             fp.write('* fragment patch rtf file generated with py_prep for MSLD (JV,LC)\n')
             fp.write('* (fragment from %s)\n* \n' % (frags[site][frag]))
             fp.write('  %d %d\n\n' % (rtfvers1,rtfvers2))
             if ChkQChange:             # Calc frag net charge
                 qsum=0.0
                 for at in Fatoms[site][frag]:
-                    qsum+=Qfrag[site][frag][at]
-                qsum=float(str(np.around(qsum,decimals=dec)))
+                    qsum += float(Qfrag[site][frag][at])
+                qsum = np.around(qsum,decimals=dec)
                 fp.write('PRES p%d_%d    %5.3f\n' % (site+1,frag+1,qsum))
             else:
                 fp.write('PRES p%d_%d    %5.3f\n' % (site+1,frag+1,siteavg[site]))
@@ -998,6 +1078,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     #################################################################
     ## Write CHARMM (prep) input script - full_ligand.prm not needed to write this file
 
+    """
     fp=open(outdir+'/nsubs','w')
     nblocks=0
     for site in range(nsites):
@@ -1010,7 +1091,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
     fp=open(outdir+'/nreps','w')
     fp.write("1")
     fp.close()
-
+    """
 
     return
 

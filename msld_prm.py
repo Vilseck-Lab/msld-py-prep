@@ -8,12 +8,50 @@ import numpy as np
 import pandas as pd
 from copy import deepcopy
 import os
+import yaml
 
 class PRM_Error(Exception):
     import sys
     sys.exit
 
-def MsldPRM(outdir,cgenff,verbose=False,debug=False):
+def readRTF(filename):
+    """ Read and process a given rtf file """
+    tmp={'NAME':'','MASS':[],'ATTYPE':{},'BOND':[],'IMPR':[]}
+    masses=[]
+    atoms=[]
+    types={}
+    bonds=[]
+    imprs=[]
+
+    fp=open(filename,'r')
+    line=fp.readline()
+    # get the name of the original file from the 2nd line
+    line=fp.readline()
+    tmp['NAME']=line.split()[-1][:-1]
+    # get the rest of the rtf info
+    while line:
+        if line[0:4] == 'MASS':
+            tmp['MASS'].append(line)
+            masses.append(line)
+        if line[0:4] == 'ATOM':
+            lns=line.split()
+            tmp['ATTYPE'][lns[1]]=lns[2]
+            atoms.append(lns[1])
+            types[lns[1]]=lns[2]
+        if line[0:4] == 'BOND':
+            tmp['BOND'].append(line.split()[1:])
+            bonds.append(line.split()[1:])
+        if line[0:4] == 'IMPR' or line[0:4] == '!IMP':
+            tmp['IMPR'].append(line.split()[1:])
+            imprs.append(line.split()[1:])
+        if line[0:3] == 'END':
+            break
+        line=fp.readline()
+    fp.close()
+    return tmp,masses,atoms,types,bonds,imprs
+
+
+def MsldPRM(mcsout,wdir, outdir,cgenff,verbosity = 5,debug=False):
     """
     Using the information within the outdir rtf files, build outdir/full_ligand.prm 
     so that all ligand parameters are within a single file.
@@ -21,61 +59,36 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     If cgenff=True, the we expect missing parameters, otherwise
     write out warnings if explicit parameters are not available!
 
-    Use verbose=True to get extra output
+    Use verbosity  to set output noise level
     Use debug=True to get LOTS of extra output
     """
 
     # load base information
+    with open(mcsout, 'r') as fmcs:
+        mcsDict = yaml.safe_load(fmcs)
+
+    nsubs = mcsDict['NSUBS']
+    print('<msld_prm> NSUBS: ', nsubs)
+
+    nsites = len(nsubs)
+
+    """
     fp=open(outdir+'/nsubs','r')
     nsubs=[]
     for sub in fp.readline().split():
         nsubs.append(int(sub))
     nsites=len(nsubs)
     fp.close()
+    """
 
-    if verbose:
-        print("\nBuild full_ligand.prm for a series of ligands with")
-        print(nsites,'sites (',nsubs,'substituents per site)\n')
+    if verbosity > 3:
+        print("\n<msld_prm> Build full_ligand.prm for a series of ligands with")
+        print(f"{nsites} site(s) ({nsubs} substituents per site)\n")
 
     
     #################################################################
     ## Read the information from each *.rtf
 
-    def readRTF(filename):
-        """ Read and process a given rtf file """
-        tmp={'NAME':'','MASS':[],'ATTYPE':{},'BOND':[],'IMPR':[]}
-        masses=[]
-        atoms=[]
-        types={}
-        bonds=[]
-        imprs=[]
-
-        fp=open(outdir+'/'+filename,'r')
-        line=fp.readline()
-        # get the name of the original file from the 2nd line
-        line=fp.readline()
-        tmp['NAME']=line.split()[-1][:-1]
-        # get the rest of the rtf info
-        while line:
-            if line[0:4] == 'MASS':
-                tmp['MASS'].append(line)
-                masses.append(line)
-            if line[0:4] == 'ATOM':
-                lns=line.split()
-                tmp['ATTYPE'][lns[1]]=lns[2]
-                atoms.append(lns[1])
-                types[lns[1]]=lns[2]
-            if line[0:4] == 'BOND':
-                tmp['BOND'].append(line.split()[1:])
-                bonds.append(line.split()[1:])
-            if line[0:4] == 'IMPR' or line[0:4] == '!IMP':
-                tmp['IMPR'].append(line.split()[1:])
-                imprs.append(line.split()[1:])
-            if line[0:3] == 'END':
-                break
-            line=fp.readline()
-        fp.close()
-        return tmp,masses,atoms,types,bonds,imprs
 
     # initialize empty structures
     rtfinfo=[]
@@ -86,7 +99,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     allimprs=[]
 
     # read core.rtf first
-    (tmp,Cmass,Catoms,Ctypes,Cbonds,Cimprs)=readRTF('core.rtf')
+    (tmp,Cmass,Catoms,Ctypes,Cbonds,Cimprs)=readRTF(os.path.join(outdir,'core.rtf'))
     rtfinfo.append(tmp)
     allmasses=allmasses+Cmass
     allatoms=allatoms+Catoms
@@ -97,8 +110,8 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     # read frags next
     for site in range(nsites):
         for frag in range(nsubs[site]):
-            sname='site'+str(site+1)+'_sub'+str(frag+1)+'_pres.rtf'
-            (tmp,Fmass,Fatoms,Ftypes,Fbonds,Fimprs)=readRTF(sname)
+            sname=f'site{site+1}_sub{frag+1}_pres.rtf'
+            (tmp,Fmass,Fatoms,Ftypes,Fbonds,Fimprs)=readRTF(os.path.join(outdir, sname))
             rtfinfo.append(tmp)
             allmasses=allmasses+Fmass
             allatoms=allatoms+Fatoms
@@ -128,7 +141,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     prmimpr={}
     prmnb={}
     for rtf in range(len(rtfinfo)):
-        fp=open(rtfinfo[rtf]['NAME']+'.prm','r')
+        fp=open(os.path.join(wdir, f"{rtfinfo[rtf]['NAME']}.prm"),'r')
         line=fp.readline()
         while line:
             # look for BOND terms
@@ -338,7 +351,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
                     if not cgenff:
                         print("No BOND parameter found for "+at1+'-'+at2+' ('+namef+')')
                     else:
-                        if verbose:
+                        if refMolIdx:
                             print("No BOND parameter found for "+at1+'-'+at2+' ('+namef+')')
 
             # nonbond parameters
@@ -363,7 +376,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
                         if not cgenff:
                             print("No ANGLE parameter found for "+at1+'-'+at2+'-'+at3+' ('+namef+')')
                         else:
-                            if verbose:
+                            if verbosity > 4:
                                 print("No ANGLE parameter found for "+at1+'-'+at2+'-'+at3+' ('+namef+')')
 
                 # dihedral parameters
@@ -386,7 +399,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
                         if not cgenff:
                             print("No DIHEDRAL parameter found for "+at1+'-'+at2+'-'+at3+'-'+at4+' ('+namef[:-2]+')')
                         else:
-                            if verbose:
+                            if verbosity > 4:
                                 print("No DIHEDRAL parameter found for "+at1+'-'+at2+'-'+at3+'-'+at4+' ('+namef[:-2]+')')
 
     #if debug:
@@ -416,7 +429,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
                 if not cgenff:
                     print("No IMPROPER parameter found for "+impr[0]+'-'+impr[1]+'-'+impr[2]+'-'+impr[3]+' ('+namef+')')
                 else:
-                    if verbose:
+                    if verbosity > 4:
                         print("No IMPROPER parameter found for "+impr[0]+'-'+impr[1]+'-'+impr[2]+'-'+impr[3]+' ('+namef+')')
     #if debug:
     #    print("Improper Prms in Use:")
@@ -428,30 +441,28 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     ## Write full_ligand.prm
 
     # Add in bonds and make a bond matrix
-    fp=open(outdir+'/full_ligand.prm','w')
-    fp.write("* MSLD ligand prm file generated with py_prep (JV,LC)\n* \n\n")
+    with open(os.path.join(outdir,'full_ligand.prm'),'w') as fp:
+        fp.write("* MSLD ligand prm file generated with py_prep (JV,LC)\n* \n\n")
 
-    fp.write("BONDS\n")
-    for bond in newbondL:
-        fp.write("%s %s\n" % (bond,newbondD[bond]))
-    fp.write("\nANGLES\n")
-    for angl in newangL:
-        fp.write("%s %s\n" % (angl,newangD[angl]))
-    fp.write("\nDIHEDRALS\n")
-    for phi in newphiL:
-        fp.write("%s %s\n" % (phi[:-2],newphiD[phi]))
-    fp.write("\nIMPROPERS\n")
-    for impr in newimprL:
-        fp.write("%s %s\n" % (impr,newimprD[impr]))
-    if len(newnbL) != 0:
-        fp.write("\n")
-        fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
-        fp.write("cutnb 14.0 ctofnb 12.0 ctonnb 11.5 eps 1.0 e14fac 0.5  geom\n")
-        for nb in newnbL:
-            fp.write("%s" %(newnbD[nb])) # no new line character
-            #fp.write("%s\n" %(newnbD[nb]))
-    fp.write("\nEND")
-    fp.close()
+        fp.write("BONDS\n")
+        for bond in newbondL:
+            fp.write("%s %s\n" % (bond,newbondD[bond]))
+        fp.write("\nANGLES\n")
+        for angl in newangL:
+            fp.write("%s %s\n" % (angl,newangD[angl]))
+        fp.write("\nDIHEDRALS\n")
+        for phi in newphiL:
+            fp.write("%s %s\n" % (phi[:-2],newphiD[phi]))
+        fp.write("\nIMPROPERS\n")
+        for impr in newimprL:
+            fp.write("%s %s\n" % (impr,newimprD[impr]))
+        if len(newnbL) != 0:
+            fp.write("\n")
+            fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
+            fp.write("cutnb 14.0 ctofnb 12.0 ctonnb 11.5 eps 1.0 e14fac 0.5  geom\n")
+            for nb in newnbL:
+                fp.write("%s" %(newnbD[nb])) # no new line character
+                #fp.write("%s\n" %(newnbD[nb]))
+        fp.write("\nEND")
 
     return
-
