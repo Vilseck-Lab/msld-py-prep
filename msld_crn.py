@@ -129,7 +129,7 @@ def MsldCRN(mcsout,outdir,inFrag,AnCore,ChkQChange=True,verbose=False,debug=Fals
                     lns=line.split()
                     #rtfinfo[-1]['ATOM'].append(lns[1:4])
                     rtfinfo[-1]['ATTYPE'][lns[1]]=lns[2]
-                    rtfinfo[-1]['ATQ'][lns[1]]=lns[3]
+                    rtfinfo[-1]['ATQ'][lns[1]]=float(lns[3])
                     line=fp.readline()
             if line[0:4] == 'BOND':
                 while line[0:4] == 'BOND':
