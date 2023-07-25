@@ -91,19 +91,22 @@ def get_current_atom_types():
     """
     Get current atom types in "CGenFF_atomtypes.txt"
     """
-    with open("CGenFF_atomtypes.txt",'r') as f:
+    attypesPath = os.path.dirname(__file__)
+    with open(f"{attypesPath}/CGenFF_atomtypes.txt",'r') as f:
         current_ats = f.readlines()
     current_ats = [at.strip() for at in current_ats]
+    return current_ats
 
 def update_atomtypes(attypes):
     current_ats = get_current_atom_types()
-
+    
     # Update CGenFF_atomtypes for any new atom types 
     current_ats.extend(attypes)
     current_ats = list(set(current_ats))
-    if os.path.exists("CGenFF_atomtypes.txt"):
-        os.remove("CGenFF_atomtypes.txt")
-    with open("CGenFF_atomtypes.txt",'w') as f:
+    attypesPath = os.path.dirname(__file__)
+    if os.path.exists(f"{attypesPath}/CGenFF_atomtypes.txt"):
+        os.remove(f"{attypesPath}/CGenFF_atomtypes.txt")
+    with open(f"{attypesPath}/CGenFF_atomtypes.txt",'w') as f:
         f.write("\n".join(current_ats))
 
 
@@ -133,7 +136,8 @@ def read_rtf(fn):
                     partial_charges.append(line[3])
 
     update_atomtypes(attypes)
-    CGenFF2Num, Num2CGenFF = code_cgenff("CGenFF_atomtypes.txt")
+    attypesPath = os.path.dirname(__file__)
+    CGenFF2Num, Num2CGenFF = code_cgenff(f"{attypesPath}/CGenFF_atomtypes.txt")
     Attypes = list(map(lambda x: CGenFF2Num[x], attypes))
     return Attypes, partial_charges, attypes, atnames
 
@@ -186,7 +190,8 @@ def read_biovia_mol2(fn):
     MATCHTypes = []
     Actualtypes = get_property(fn,'ForcefieldType')
     MATCHpcs = get_property(fn,'PartialCharge')
-    CGenFF2Num, Num2CGenFF = code_cgenff("CGenFF_atomtypes.txt") 
+    attypesPath = os.path.dirname(__file__)
+    CGenFF2Num, Num2CGenFF = code_cgenff(f"{attypesPath}/CGenFF_atomtypes.txt") 
     for i in Actualtypes:
         MATCHTypes.append(list(map(lambda x: CGenFF2Num[x],i)))
     return MATCHTypes, MATCHpcs, Actualtypes 
@@ -294,7 +299,8 @@ def read_cg_rtf(fn):
     Since pieces of the molecules are patched, this function looks for
     core first (LIG) and then for the other patches after this.
     """
-    CGenFF2Num, Num2CGenFF = code_cgenff("CGenFF_atomtypes.txt") 
+    attypesPath = os.path.dirname(__file__)
+    CGenFF2Num, Num2CGenFF = code_cgenff(f"{attypesPath}/CGenFF_atomtypes.txt") 
     # Read Atom Types and Partial Charges
     Actualtypes,lpindex = get_cg_rtf_types(fn) 
     pcs = get_cg_rtf_pcs(fn,lpindex)
@@ -698,7 +704,7 @@ atoms at one R group)
     return R_groups, shortest_paths, anchors 
 
 
-def writeMCS(molnames, corenames, rgroupnames, anchor_names):
+def writeMCS(molnames, corenames, rgroupnames, anchor_names,mcsout="MCS_for_MSLD.txt"):
     nsites = len(rgroupnames)
     reflig = molnames[0]
     text = f"""# Maximum Common Substructure Search for MSLD (JV/LC 2023)
@@ -729,11 +735,12 @@ CORE
 
     text += 'END'
 
-    with open("MCS_for_MSLD.txt",'w') as fout:
+    with open(mcsout,'w') as fout:
         fout.write(text)
 
+    return reflig
 
-def MCSS_RDecomp(mol_list):
+def MCSS_RDecomp(mol_list,mcsout="MCS_for_MSLD.txt"):
     """
     Function takes in a list of ligands, identifies the common core and
     shows charge distribution of each common core atom across all ligands
@@ -850,7 +857,9 @@ def MCSS_RDecomp(mol_list):
                 R_group_names[site].append([AtomNames[molidx][atom] for atom in R_groups[site][molidx]])
   
          
-        writeMCS(molnames, CoreNames, R_group_names,anchors)
+        reflig = writeMCS(molnames, CoreNames, R_group_names,anchors, mcsout=mcsout)
+
+        return reflig
 
     # Fix 2D Depiction of every "core" fragment for every molecule
     for i in range(len(mols)):
@@ -1017,4 +1026,8 @@ CORE
     fn.write("END")
     fn.close()
 
-MCSS_RDecomp("mol_list.txt") 
+    return molnames[0]
+
+if __name__ == '__main__':
+    mol_list = 'mol_list.txt' 
+    MCSS_RDecomp(mol_list)

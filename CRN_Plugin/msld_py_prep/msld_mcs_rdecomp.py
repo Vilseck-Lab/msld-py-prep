@@ -1026,4 +1026,8 @@ CORE
     fn.write("END")
     fn.close()
 
-    return molnames[0] 
+    return molnames[0]
+
+if __name__ == '__main__':
+    mol_list = 'mol_list.txt' 
+    MCSS_RDecomp(mol_list)
