@@ -246,8 +246,9 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
                     line=fp.readline()
                     if line[0:3] == 'cut':
                         line=fp.readline() # skip the second nbond line
-                    while (line != '\n') and (line[0:3] != 'END'):
+                    while (line != '\n') and (line[0:3] != 'END') and line:
                         lns=line.split()
+                        print(lns)
                         if not (lns[0] in prmnb):
                             prmnb[lns[0]]=line
                         else:
@@ -443,6 +444,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     fp.write("\nIMPROPERS\n")
     for impr in newimprL:
         fp.write("%s %s\n" % (impr,newimprD[impr]))
+    print(newnbL)
     if len(newnbL) != 0:
         fp.write("\n")
         fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
