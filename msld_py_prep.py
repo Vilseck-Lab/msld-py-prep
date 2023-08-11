@@ -34,7 +34,7 @@ import glob
 #####################################################################
 ## (1) Define System and File Variables
 
-sysname = "name"                          # name of future output files
+sysname = "jnk1"                          # name of future output files
 molfile = "mol_list.txt"                  # list of mol2 file names
 
 mcsout = 'MCS_for_MSLD.txt'               # MCS output filename

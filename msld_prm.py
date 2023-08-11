@@ -221,7 +221,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
             # look for IMPROPER terms
             if line[0:4] == 'IMPR':
                 line=fp.readline()
-                while (line != '\n') and ((line[0:3] != 'NON') or (line[0:3] != 'END')):
+                while (line != '\n') and (line[0:3] != 'NON') and ((not line.startswith('NON')) or (line[0:3] != 'END')):
                     lns=line.split()
                     # add the multiplicity into the name
                     namef=lns[0]+' '+lns[1]+' '+lns[2]+' '+lns[3]
