@@ -44,6 +44,7 @@ def writeALF_Files(sysname,outdir,cgenff):
         os.system('if [ -d toppar ]; then cp -r toppar '+outdir+'/; fi')
     else:
         print("\n ** Manually copy toppar files into build."+sysname+" !! \n")
+        print("\n ** Scripts assume NONBONDED line in parameter files is the same across all of the input ligands.\n")
 
     # write n* files (nsubs, nblocks, & nreps written by msld_crn.py)
     fp=open(outdir+'/name','w')

@@ -127,6 +127,7 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     prmphis={}
     prmimpr={}
     prmnb={}
+    
     for rtf in range(len(rtfinfo)):
         fp=open(rtfinfo[rtf]['NAME']+'.prm','r')
         line=fp.readline()
@@ -242,9 +243,12 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
             duplprm['IMPR']=list(set(duplprm['IMPR']))
             # look for NONBONDED terms
             if not cgenff:
+                nbondSpecs = []
                 if line[0:3] == 'NON':
+                    nbondSpecs.append(line)
                     line=fp.readline()
                     if line[0:3] == 'cut':
+                        nbondSpecs.append(line)
                         line=fp.readline() # skip the second nbond line
                     while (line != '\n') and (line[0:3] != 'END') and line:
                         lns=line.split()
@@ -445,8 +449,11 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
         fp.write("%s %s\n" % (impr,newimprD[impr]))
     if len(newnbL) != 0:
         fp.write("\n")
-        fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
-        fp.write("cutnb 14.0 ctofnb 12.0 ctonnb 11.5 eps 1.0 e14fac 0.5  geom\n")
+        if nbondSpecs:
+            fp.write("".join(nbondSpecs))
+        else:
+            fp.write("NONBONDED nbxmod 5 atom cdiel switch vatom vdistance vswitch -\n")
+            fp.write("cutnb 14.0 ctofnb 12.0 ctonnb 11.5 eps 1.0 e14fac 0.5  geom\n")
         for nb in newnbL:
             fp.write("%s" %(newnbD[nb])) # no new line character
             #fp.write("%s\n" %(newnbD[nb]))
