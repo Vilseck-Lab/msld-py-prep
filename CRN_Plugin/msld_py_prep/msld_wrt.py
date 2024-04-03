@@ -7,7 +7,7 @@
 import numpy as np
 import pandas as pd
 import glob,os
-import msld_prm
+from . import msld_prm
 #####################################################
 
 class WriteError(Exception):
