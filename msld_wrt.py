@@ -8,10 +8,10 @@ import numpy as np
 import pandas as pd
 import glob,os
 import msld_prm
-import sys
 #####################################################
 
 class WriteError(Exception):
+    import sys
     sys.exit
 
 #####################################################
@@ -504,84 +504,3 @@ def writeALF_Files(sysname,outdir,cgenff):
     # all finished
 
     return
-
-def ab2re(eps1, rmin1, eps2, rmin2):
-    if rmin1 == 0 or rmin2 == 0:
-        return 0, 0
-
-    rmin1 = rmin1*2
-    rmin2 = rmin2*2
-
-    a_ii = np.abs(eps1*rmin1**12)/4
-    a_jj = np.abs(eps2*rmin2**12)/4
-    
-    b_ii = np.abs(eps1*rmin1**6)/2
-    b_jj = np.abs(eps2*rmin2**6)/2
-    
-    a_ij = np.sqrt(a_ii*a_jj)
-    b_ij = np.sqrt(b_ii*b_jj)
-
- 
-    r_ij = (2*a_ij/b_ij)**(1/6)
-    eps_ij = 2*b_ij/(r_ij**6)
-    return r_ij, eps_ij
-
-def assembleVDWDict(fname):
-    with open(fname,'r') as f:
-        lines = f.readlines()
-
-    # Get beginning index for NBOND section 
-    bgi = [i for i,l in enumerate(lines) if l.startswith('NONBOND')][0]
-    while lines[bgi].split()[-1] == '-' or not lines[bgi] or lines[bgi] == '\n':
-        bgi += 1
-    bgi += 1
-
-    # Get final index for NBOND section 
-    endi = [i for i,l in enumerate(lines[bgi:]) if any([l == '\n','END' in l,i==len(lines[bgi:])-1])][0]
-    endi += bgi + 1 + (endi==len(lines[bgi:])-1) 
-    
-    ats = np.genfromtxt(fname,skip_header=bgi,skip_footer=len(lines)-endi, usecols=0,dtype='str')
-    regnbond = np.genfromtxt(fname,skip_header=bgi,skip_footer=len(lines)-endi, usecols=range(2,4),missing_values='\n',dtype=float)
-    
-    ## Check for special 1,4 vdw params
-    v14nbond = []
-    for i,line in enumerate(lines[bgi:endi-1]):
-        splitL = line.split()
-        if len(splitL) > 4:
-            v14nbond.append(list(map(float,splitL[5:])))
-        else:
-            v14nbond.append([0.0,0.0])
-    
-    v14nbond = np.array(v14nbond)
-    nbond = np.hstack((regnbond,v14nbond))
-
-    return dict(zip(ats,nbond))
-
-def addNBFIX(vdw,fname):
-    nbfix = {}
-    for i,key in enumerate(vdw.keys()):
-        for j,key2 in enumerate(vdw.keys()):
-            if i > j: continue
-            regr,regeps = ab2re(-vdw[key][0],vdw[key][1],-vdw[key2][0],vdw[key2][1]) 
-            v14r, v14eps  = ab2re(-vdw[key][2],vdw[key][3],-vdw[key2][2],vdw[key2][3]) 
-            nbfix[f"{key}-{key2}"] = [-regeps, regr, -v14eps, v14r]
-    
-    with open(fname,'r') as f:
-        lines = f.readlines()
-
-    with open(fname,'w') as f:
-        for i, line in enumerate(lines):
-            if not 'END' in line and (i!=len(lines)-1):
-                f.write(line)
-            else:
-                f.write('\nNBFIX\n') 
-                for key in nbfix.keys():
-                    at1 = key.split('-')[0] 
-                    at2 = key.split('-')[1]
-                    if nbfix[key][1] == 0: continue
-                    f.write(f'{at1} {at2} {nbfix[key][0]:.6f} {nbfix[key][1]:.6f} {nbfix[key][2]:.6f} {nbfix[key][3]:.6f}\n')
-                f.write('\nEND')
-
-    return
-
-
