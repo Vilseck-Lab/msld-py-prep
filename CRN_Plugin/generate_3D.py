@@ -98,7 +98,7 @@ def crippen_alignment(mobile, target,nconfs=100):
 
     # Find closest mobile conf to target conf based on Crippen Contribs
     tempscore = []
-    for cid in range(100):
+    for cid in range(nconfs):
         crippenO3A = rdMolAlign.GetCrippenO3A(mobile, target, mobile_crippen_contribs, target_crippen_contribs, cid, 0,maxIters=100)
         crippenO3A.Align()
         tempscore.append(crippenO3A.Score())
