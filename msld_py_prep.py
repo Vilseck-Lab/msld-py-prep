@@ -40,7 +40,7 @@ molfile = "mol_list.txt"                  # list of mol2 file names
 mcsout = 'MCS_for_MSLD.txt'               # MCS output filename
 outdir = 'build.'+sysname                 # MSLD output directory
 
-cgenff=True                               # Are CGenFF/ParamChem parameters being used?
+cgenff=False                               # Are CGenFF/ParamChem parameters being used?
 
 inFrag=[[]]  # reflig core atoms to include in each fragment at each site (list of nsub lists)
 AnCore=[[]]  # anchor atoms at each site to include in the core (list of nsub lists)
