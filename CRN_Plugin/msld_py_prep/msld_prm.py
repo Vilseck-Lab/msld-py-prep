@@ -513,6 +513,12 @@ def MsldPRM(outdir,cgenff,verbose=False,debug=False):
     fp=open(outdir+'/full_ligand.prm','w')
     fp.write("* MSLD ligand prm file generated with py_prep (JV,LC)\n* \n\n")
 
+    if not cgenff:
+        fp.write("ATOMS\n")
+        for atdef in allmasses:
+            fp.write(atdef)
+        fp.write('\n')
+
     fp.write("BONDS\n")
     for bond in newbondL:
         fp.write("%s %s\n" % (bond,newbondD[bond]))
