@@ -375,10 +375,25 @@ def make_dialog():
 
     # Align loaded molecules
     def alignMols(mols, wd, target):
+        """
+        Generate 3D conformers (if needed) and align each molecule to the
+        provided target using RDKit's constrained embedding when possible.
+
+        Behavior:
+        - Build or load SDFs for the provided molecules.
+        - Generate 3D conformers with generate3DMols (keeps existing behavior).
+        - For each generated molecule, find an MCS to the target and try a
+          constrained embedding using AllChem.ConstrainedEmbed. If that
+          fails, fall back to an O3A-based alignment or a simple AlignMol.
+        - Write the aligned conformer back to the SDF so downstream steps
+          (truncate_at_names, rename_atoms, PyMOL loading) remain unchanged.
+        """
         from . import generate_3D
         import pandas as pd
         from .msld_py_prep import rename_atoms
         from rdkit import Chem
+        from rdkit.Chem import AllChem, rdFMCS, rdMolAlign
+        import os
 
         file_formats = ['sdf','mol','xyz']
         loadingFunctions = {'sdf': generate_3D.load_sdf, 'mol': generate_3D.load_mol,\
@@ -388,20 +403,99 @@ def make_dialog():
         for fn,mol in zip(molsext,mols):
             try:
                 molObjList.append(loadingFunctions['sdf'](fn)[0])
-            except:
-                cmd.save(os.path.join(wd,mol+'.sdf'),selection=mol,format='sdf')
+            except Exception:
+                # ensure target SDF is present for molecules loaded in PyMOL
+                try:
+                    cmd.save(os.path.join(wd,mol+'.sdf'),selection=mol,format='sdf')
+                except Exception:
+                    pass
                 molObjList.append(loadingFunctions['sdf'](fn)[0])
 
         smileslist = list(map(Chem.MolToSmiles,molObjList))
         d = {'id': mols,'smiles': smileslist}
         df = pd.DataFrame(data=d)
-        datasetName = 'generated_mol_dataset.csv' 
+        datasetName = 'generated_mol_dataset.csv'
         df.to_csv(os.path.join(wd,datasetName),index=False)
 
         for obj in mols:
-            cmd.delete(obj)
+            try:
+                cmd.delete(obj)
+            except Exception:
+                pass
 
+        # regenerate 3D conformers (keeps original workflow)
         generate3DMols(datasetName, wd,target=target+'.sdf')
+
+        # load reference molecule (with coordinates) for constrained embed
+        ref_path = os.path.join(wd, f"{target}.sdf")
+        ref_mol = Chem.MolFromMolFile(ref_path, removeHs=False)
+        if ref_mol is None:
+            # if the reference cannot be loaded, skip constrained embed
+            return None
+
+        for mol_name in mols:
+            probe_path = os.path.join(wd, f"{mol_name}.sdf")
+            probe = Chem.MolFromMolFile(probe_path, removeHs=False)
+            if probe is None:
+                continue
+
+            # Attempt to build an MCS-based atom map between probe and reference
+            atom_map = None
+            try:
+                ref_h = Chem.RemoveHs(ref_mol)
+                probe_h = Chem.RemoveHs(probe)
+                mcs = rdFMCS.FindMCS([ref_h, probe_h], timeout=10, ringMatchesRingOnly=True)
+                if mcs and mcs.numAtoms > 0:
+                    patt = Chem.MolFromSmarts(mcs.smartsString)
+                    if patt is not None:
+                        ref_matches = ref_h.GetSubstructMatches(patt)
+                        probe_matches = probe_h.GetSubstructMatches(patt)
+                        if ref_matches and probe_matches:
+                            # take the first match
+                            ref_match = ref_matches[0]
+                            probe_match = probe_matches[0]
+                            if len(ref_match) == len(probe_match):
+                                # RDKit constrained embed expects (probe_idx, ref_idx) tuples
+                                atom_map = list(zip(probe_match, ref_match))
+            except Exception:
+                atom_map = None
+
+            aligned = False
+            # Try constrained embedding first
+            if atom_map:
+                try:
+                    # Many RDKit builds provide AllChem.ConstrainedEmbed; if available
+                    # this will produce a coordinate set for the probe constrained to the ref
+                    AllChem.ConstrainedEmbed(probe, ref_mol, atomMap=atom_map)
+                    aligned = True
+                except Exception:
+                    aligned = False
+
+            # Fallback to O3A (restraint-based alignment) if constrained embed not available
+            if (not aligned) and atom_map:
+                try:
+                    probe_idx = [p for p, _ in atom_map]
+                    ref_idx = [r for _, r in atom_map]
+                    o3a = rdMolAlign.GetO3A(probe, ref_mol, probe_idx, ref_idx)
+                    o3a.Align()
+                    aligned = True
+                except Exception:
+                    aligned = False
+
+            # Last-resort: simple alignment using AllChem.AlignMol
+            if not aligned:
+                try:
+                    AllChem.AlignMol(probe, ref_mol)
+                except Exception:
+                    pass
+
+            # Write aligned molecule back to SDF so downstream code can use it
+            try:
+                writer = Chem.SDWriter(probe_path)
+                writer.write(probe)
+                writer.close()
+            except Exception:
+                pass
 
     # 3D conformer generation helper functions
     def generate3DMols(fn, wd, smiles_col=1, names_col=0, delim=',',pattern=None,target=None):
@@ -683,7 +777,7 @@ def make_dialog():
                                     Otherwise create CHARMM stream files (.str) containing\
                                     both rtf and prm information.")
                         return None
- 
+  
             cmd.save(ob+'.mol2',selection=ob,format='mol2')
             truncate_at_names(ob+'.mol2')
 
